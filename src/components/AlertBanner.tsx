@@ -2,7 +2,10 @@
 
 import type { SectorAnalysis } from "@/lib/analysis";
 
-const statusConfig = {
+const statusConfig: Record<
+  string,
+  { bg: string; badge: string; icon: string }
+> = {
   crash: {
     bg: "bg-red-50 border-red-200",
     badge: "bg-red-600 text-white",
@@ -17,6 +20,21 @@ const statusConfig = {
     bg: "bg-yellow-50 border-yellow-200",
     badge: "bg-yellow-500 text-white",
     icon: "📉",
+  },
+  surge: {
+    bg: "bg-green-50 border-green-200",
+    badge: "bg-green-600 text-white",
+    icon: "🔺",
+  },
+  contrarian_rise: {
+    bg: "bg-emerald-50 border-emerald-200",
+    badge: "bg-emerald-500 text-white",
+    icon: "🚀",
+  },
+  outperform: {
+    bg: "bg-teal-50 border-teal-200",
+    badge: "bg-teal-500 text-white",
+    icon: "📈",
   },
   normal: { bg: "", badge: "", icon: "" },
 };
@@ -34,8 +52,8 @@ export default function AlertBanner({ alerts }: { alerts: SectorAnalysis[] }) {
 
   return (
     <div className="space-y-3 mb-6">
-      <h2 className="text-lg font-bold text-red-600">
-        주의 섹터 ({alerts.length}개)
+      <h2 className="text-lg font-bold">
+        특이 섹터 ({alerts.length}개)
       </h2>
       {alerts.map((alert) => {
         const config = statusConfig[alert.status];

@@ -4,7 +4,10 @@ export type SectorStatus =
   | "normal"
   | "crash"
   | "underperform"
-  | "contrarian_drop";
+  | "contrarian_drop"
+  | "surge"
+  | "outperform"
+  | "contrarian_rise";
 
 export interface SectorAnalysis {
   code: string;
@@ -67,6 +70,9 @@ const STATUS_LABELS: Record<SectorStatus, string> = {
   crash: "급락",
   underperform: "부진",
   contrarian_drop: "역행 하락",
+  surge: "급등",
+  outperform: "강세",
+  contrarian_rise: "역행 상승",
 };
 
 export function analyzeSectors(
@@ -113,6 +119,33 @@ export function analyzeSectors(
       reason = `등락률 ${s.changeRate.toFixed(2)}% (평균 ${avgReturn.toFixed(2)}%, z=${z.toFixed(1)})`;
     }
 
+    // 4. 급등: 실제 상승 + 평균 대비 2%p 이상 추가 상승, 또는 Z-score > 2
+    if (
+      status === "normal" &&
+      s.changeRate > 0 &&
+      (s.changeRate > avgReturn + 2 || z > 2)
+    ) {
+      status = "surge";
+      reason = `등락률 +${s.changeRate.toFixed(2)}% (평균 ${avgReturn.toFixed(2)}%, z=${z.toFixed(1)})`;
+    }
+
+    // 5. 역행 상승: 평균이 음수인데 혼자 상승
+    if (
+      status === "normal" &&
+      avgReturn < 0 &&
+      s.changeRate > 0.5 &&
+      Math.abs(s.changeRate - avgReturn) > 1.5
+    ) {
+      status = "contrarian_rise";
+      reason = `시장 평균 ${avgReturn.toFixed(2)}%인데 +${s.changeRate.toFixed(2)}%`;
+    }
+
+    // 6. 강세: Z-score > 1.5 (상대적 강세, 마이너스여도 가능)
+    if (status === "normal" && z > 1.5) {
+      status = "outperform";
+      reason = `등락률 ${s.changeRate.toFixed(2)}% (평균 ${avgReturn.toFixed(2)}%, z=${z.toFixed(1)})`;
+    }
+
     return {
       code: s.code,
       name: s.name,
@@ -131,13 +164,16 @@ export function analyzeSectors(
     .sort((a, b) => {
       const priority: Record<SectorStatus, number> = {
         crash: 0,
-        contrarian_drop: 1,
-        underperform: 2,
-        normal: 3,
+        surge: 1,
+        contrarian_drop: 2,
+        contrarian_rise: 3,
+        underperform: 4,
+        outperform: 5,
+        normal: 6,
       };
       const p = priority[a.status] - priority[b.status];
       if (p !== 0) return p;
-      return a.changeRate - b.changeRate; // 같은 상태면 등락률 낮은 순
+      return Math.abs(b.changeRate) - Math.abs(a.changeRate); // 같은 상태면 변동률 큰 순
     })
     .slice(0, 10); // 상위 10개만
 

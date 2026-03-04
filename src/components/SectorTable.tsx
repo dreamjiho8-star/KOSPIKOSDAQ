@@ -10,12 +10,17 @@ const statusBadge: Record<string, string> = {
   crash: "bg-red-600 text-white",
   contrarian_drop: "bg-orange-500 text-white",
   underperform: "bg-yellow-500 text-white",
+  surge: "bg-green-600 text-white",
+  contrarian_rise: "bg-emerald-500 text-white",
+  outperform: "bg-teal-500 text-white",
 };
 
 export default function SectorTable({
   sectors,
+  onSectorClick,
 }: {
   sectors: SectorAnalysis[];
+  onSectorClick?: (code: string, name: string) => void;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("changeRate");
   const [asc, setAsc] = useState(true);
@@ -70,7 +75,8 @@ export default function SectorTable({
         {sorted.map((s) => (
           <div
             key={s.code}
-            className={`bg-white rounded-lg border p-3 flex items-center justify-between ${
+            onClick={() => onSectorClick?.(s.code, s.name)}
+            className={`bg-white rounded-lg border p-3 flex items-center justify-between cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors ${
               s.status !== "normal" ? "border-l-4" : ""
             } ${
               s.status === "crash"
@@ -79,6 +85,12 @@ export default function SectorTable({
                 ? "border-l-orange-500"
                 : s.status === "underperform"
                 ? "border-l-yellow-500"
+                : s.status === "surge"
+                ? "border-l-green-500"
+                : s.status === "contrarian_rise"
+                ? "border-l-emerald-500"
+                : s.status === "outperform"
+                ? "border-l-teal-400"
                 : ""
             }`}
           >

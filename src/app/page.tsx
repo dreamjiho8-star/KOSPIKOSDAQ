@@ -5,12 +5,17 @@ import AlertBanner from "@/components/AlertBanner";
 import SectorTable from "@/components/SectorTable";
 import PerformanceChart from "@/components/PerformanceChart";
 import IndexCards from "@/components/IndexCards";
+import SectorDetail from "@/components/SectorDetail";
 import type { AnalysisResult } from "@/lib/analysis";
 
 export default function Home() {
   const [data, setData] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedSector, setSelectedSector] = useState<{
+    code: string;
+    name: string;
+  } | null>(null);
 
   useEffect(() => {
     fetch("/api/sectors")
@@ -94,14 +99,26 @@ export default function Home() {
       <PerformanceChart sectors={data.sectors} />
 
       {/* 업종 테이블 */}
-      <SectorTable sectors={data.sectors} />
+      <SectorTable
+        sectors={data.sectors}
+        onSectorClick={(code, name) => setSelectedSector({ code, name })}
+      />
+
+      {/* 섹터 상세 모달 */}
+      {selectedSector && (
+        <SectorDetail
+          sectorCode={selectedSector.code}
+          sectorName={selectedSector.name}
+          onClose={() => setSelectedSector(null)}
+        />
+      )}
 
       {/* 하단 정보 */}
       <div className="text-xs text-gray-400 text-center mt-8 space-y-1">
         <p>데이터 출처: 네이버 금융 (finance.naver.com)</p>
         <p>
-          급락: Z-score &lt; -2 또는 평균 대비 -2%p 이상 | 역행하락: 시장 상승 중
-          혼자 하락 | 부진: Z-score &lt; -1.5
+          급락: Z &lt; -2 | 급등: Z &gt; 2 | 역행하락/상승: 시장과 반대 |
+          부진/강세: |Z| &gt; 1.5
         </p>
         <p>
           마지막 업데이트:{" "}

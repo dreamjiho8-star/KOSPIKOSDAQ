@@ -104,6 +104,200 @@ export async function fetchIndexHistory(
   return prices;
 }
 
+// ---- Sector Detail Types ----
+
+export interface StockInSector {
+  code: string;
+  name: string;
+  price: number;
+  changeRate: number;
+  marketCap: number; // 시가총액 (억원)
+}
+
+export interface InvestorTrading {
+  foreignNet: number; // 외국인 순매수 (억원)
+  institutionNet: number; // 기관 순매수 (억원)
+  individualNet: number; // 개인 순매수 (억원)
+}
+
+export interface SectorDetailResult {
+  sectorCode: string;
+  sectorName: string;
+  topByMarketCap: StockInSector[];
+  topByVolatility: StockInSector[];
+  investor: InvestorTrading;
+}
+
+const UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
+
+// 시가총액 문자열 파싱: "1,019조 3,617억" → 10193617 (억원)
+function parseMarketCapStr(value: string): number {
+  let total = 0;
+  const joMatch = value.match(/([\d,.]+)조/);
+  const ukMatch = value.match(/([\d,.]+)억/);
+  if (joMatch)
+    total += parseFloat(joMatch[1].replace(/,/g, "")) * 10000;
+  if (ukMatch) total += parseFloat(ukMatch[1].replace(/,/g, ""));
+  return Math.round(total);
+}
+
+// 콤마 제거 후 숫자 파싱
+function parseNum(s: string): number {
+  return parseInt(s.replace(/[,+]/g, "")) || 0;
+}
+
+// 업종 상세 페이지에서 종목 코드 추출
+async function parseSectorStockCodes(sectorCode: string): Promise<{
+  sectorName: string;
+  stockCodes: string[];
+}> {
+  const url = `https://finance.naver.com/sise/sise_group_detail.naver?type=upjong&no=${sectorCode}`;
+  const res = await fetch(url, { headers: { "User-Agent": UA } });
+  const buffer = Buffer.from(await res.arrayBuffer());
+  const html = iconv.decode(buffer, "EUC-KR");
+
+  // 업종명
+  const nameMatch = html.match(/<title>([^:<]+)/);
+  const sectorName = nameMatch ? nameMatch[1].trim() : "";
+
+  // 종목 코드 (6자리) 추출 및 중복 제거
+  const codes: string[] = [];
+  const codeRegex = /item\/main\.naver\?code=(\d{6})/g;
+  let m;
+  while ((m = codeRegex.exec(html)) !== null) {
+    if (!codes.includes(m[1])) codes.push(m[1]);
+  }
+
+  return { sectorName, stockCodes: codes };
+}
+
+// integration 엔드포인트에서 종목 전체 정보 가져오기 (시총, 가격, 등락률, 투자자)
+interface StockFullData extends StockInSector {
+  foreignNetOk: number;
+  institutionNetOk: number;
+  individualNetOk: number;
+}
+
+async function fetchStockFullData(
+  stockCode: string
+): Promise<StockFullData | null> {
+  try {
+    const res = await fetch(
+      `https://m.stock.naver.com/api/stock/${stockCode}/integration`,
+      { headers: { "User-Agent": UA } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+
+    const name = data.stockName || "";
+
+    // totalInfos에서 시가총액, 전일가 추출
+    let marketCap = 0;
+    let lastClosePrice = 0;
+    const infos = data.totalInfos || [];
+    for (const info of infos) {
+      if (info.code === "marketValue") {
+        marketCap = parseMarketCapStr(info.value || "");
+      } else if (info.code === "lastClosePrice") {
+        lastClosePrice = parseNum(info.value || "0");
+      }
+    }
+
+    // dealTrendInfos에서 당일 가격 및 투자자 데이터 추출
+    let price = lastClosePrice;
+    let foreignNetOk = 0;
+    let institutionNetOk = 0;
+    let individualNetOk = 0;
+    let changeRate = 0;
+
+    const trends = data.dealTrendInfos || [];
+    if (trends.length > 0) {
+      const latest = trends[0];
+      const cp = parseNum(latest.closePrice || "0");
+      if (cp > 0) price = cp;
+
+      const foreignShares = parseNum(latest.foreignerPureBuyQuant || "0");
+      const institutionShares = parseNum(latest.organPureBuyQuant || "0");
+      const individualShares = parseNum(latest.individualPureBuyQuant || "0");
+
+      const toOk = (shares: number) =>
+        Math.round((shares * price) / 100000000);
+      foreignNetOk = toOk(foreignShares);
+      institutionNetOk = toOk(institutionShares);
+      individualNetOk = toOk(individualShares);
+    }
+
+    // 등락률 계산
+    if (lastClosePrice > 0 && price > 0) {
+      changeRate =
+        ((price - lastClosePrice) / lastClosePrice) * 100;
+    }
+
+    return {
+      code: stockCode,
+      name,
+      price,
+      changeRate: Math.round(changeRate * 100) / 100,
+      marketCap,
+      foreignNetOk,
+      institutionNetOk,
+      individualNetOk,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// 섹터 상세 정보 메인 함수
+export async function fetchSectorDetail(
+  sectorCode: string
+): Promise<SectorDetailResult> {
+  // 1. 업종 내 종목 코드 가져오기
+  const { sectorName, stockCodes } = await parseSectorStockCodes(sectorCode);
+
+  // 2. 모든 종목 정보 병렬 조회 (최대 30개)
+  const allStocks = (
+    await Promise.all(
+      stockCodes.slice(0, 30).map((c) => fetchStockFullData(c))
+    )
+  ).filter((s): s is StockFullData => s !== null && s.price > 0);
+
+  // 3. 시총 상위 5
+  const topByMarketCap = [...allStocks]
+    .sort((a, b) => b.marketCap - a.marketCap)
+    .slice(0, 5)
+    .map(({ foreignNetOk, institutionNetOk, individualNetOk, ...rest }) => rest);
+
+  // 4. 등락률 변동 상위 5 (절대값)
+  const topByVolatility = [...allStocks]
+    .sort((a, b) => Math.abs(b.changeRate) - Math.abs(a.changeRate))
+    .slice(0, 5)
+    .map(({ foreignNetOk, institutionNetOk, individualNetOk, ...rest }) => rest);
+
+  // 5. 투자자별 매매동향 (시총 상위 종목 합산)
+  const sortedByMcap = [...allStocks].sort(
+    (a, b) => b.marketCap - a.marketCap
+  );
+  let foreignNet = 0;
+  let institutionNet = 0;
+  let individualNet = 0;
+
+  for (const s of sortedByMcap.slice(0, 15)) {
+    foreignNet += s.foreignNetOk;
+    institutionNet += s.institutionNetOk;
+    individualNet += s.individualNetOk;
+  }
+
+  return {
+    sectorCode,
+    sectorName,
+    topByMarketCap,
+    topByVolatility,
+    investor: { foreignNet, institutionNet, individualNet },
+  };
+}
+
 // 주요 지수들의 최신 시세 가져오기
 export async function fetchMajorIndices(): Promise<
   { info: IndexInfo; latest: IndexPrice; prev: IndexPrice | null; weekAgo: IndexPrice | null; monthAgo: IndexPrice | null }[]
