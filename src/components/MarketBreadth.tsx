@@ -113,7 +113,7 @@ export default function MarketBreadth({
         <div className="bg-red-50 dark:bg-red-950/30 rounded-xl p-2.5">
           <div className="text-[10px] text-muted mb-0.5">최대 상승 업종</div>
           <div className="text-sm font-bold text-red-600 dark:text-red-400">
-            +{maxUp.toFixed(2)}%
+            {maxUp >= 0 ? "+" : ""}{maxUp.toFixed(2)}%
           </div>
           <div className="text-xs text-muted truncate">
             {sectors.find((s) => s.changeRate === maxUp)?.name}
