@@ -338,6 +338,7 @@ export default function Home() {
         <SectorDetail
           sectorCode={selectedSector.code}
           sectorName={selectedSector.name}
+          period={period}
           onClose={() => setSelectedSector(null)}
         />
       )}

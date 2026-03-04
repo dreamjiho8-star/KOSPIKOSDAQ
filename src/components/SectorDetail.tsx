@@ -6,6 +6,7 @@ import type { SectorDetailResult, StockInSector } from "@/lib/krx";
 interface Props {
   sectorCode: string;
   sectorName: string;
+  period?: string;
   onClose: () => void;
 }
 
@@ -391,6 +392,7 @@ type DetailTab = "heatmap" | "info";
 export default function SectorDetail({
   sectorCode,
   sectorName,
+  period = "1d",
   onClose,
 }: Props) {
   const [data, setData] = useState<SectorDetailResult | null>(null);
@@ -403,7 +405,7 @@ export default function SectorDetail({
     setLoading(true);
     setError(null);
     setExpandedStock(null);
-    fetch(`/api/sectors/${sectorCode}`)
+    fetch(`/api/sectors/${sectorCode}?period=${period}`)
       .then((res) => res.json())
       .then((json) => {
         if (json.success) setData(json.data);
@@ -411,7 +413,7 @@ export default function SectorDetail({
       })
       .catch(() => setError("서버에 연결할 수 없습니다."))
       .finally(() => setLoading(false));
-  }, [sectorCode]);
+  }, [sectorCode, period]);
 
   const rateColor = (v: number) =>
     v >= 0
