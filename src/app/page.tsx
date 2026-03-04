@@ -99,7 +99,10 @@ export default function Home() {
       <IndexCards indices={data.indices} />
 
       {/* 등락률 차트 */}
-      <PerformanceChart sectors={data.sectors} />
+      <PerformanceChart
+        sectors={data.sectors}
+        onSectorClick={(code, name) => setSelectedSector({ code, name })}
+      />
 
       {/* 업종 테이블 */}
       <SectorTable
