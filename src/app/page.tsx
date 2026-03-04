@@ -90,7 +90,10 @@ export default function Home() {
       </div>
 
       {/* 경고 배너 */}
-      <AlertBanner alerts={data.alerts} />
+      <AlertBanner
+        alerts={data.alerts}
+        onSectorClick={(code, name) => setSelectedSector({ code, name })}
+      />
 
       {/* 주요 지수 */}
       <IndexCards indices={data.indices} />

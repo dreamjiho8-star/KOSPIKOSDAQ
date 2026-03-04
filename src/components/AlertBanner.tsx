@@ -39,7 +39,13 @@ const statusConfig: Record<
   normal: { bg: "", badge: "", icon: "" },
 };
 
-export default function AlertBanner({ alerts }: { alerts: SectorAnalysis[] }) {
+export default function AlertBanner({
+  alerts,
+  onSectorClick,
+}: {
+  alerts: SectorAnalysis[];
+  onSectorClick?: (code: string, name: string) => void;
+}) {
   if (alerts.length === 0) {
     return (
       <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6">
@@ -60,7 +66,8 @@ export default function AlertBanner({ alerts }: { alerts: SectorAnalysis[] }) {
         return (
           <div
             key={alert.code}
-            className={`border rounded-xl p-4 ${config.bg}`}
+            onClick={() => onSectorClick?.(alert.code, alert.name)}
+            className={`border rounded-xl p-4 cursor-pointer hover:brightness-95 active:brightness-90 transition ${config.bg}`}
           >
             <div className="flex items-center gap-2 mb-1">
               <span className="text-lg">{config.icon}</span>
