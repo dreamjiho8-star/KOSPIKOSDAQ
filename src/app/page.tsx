@@ -155,10 +155,10 @@ export default function Home() {
       <main className="max-w-5xl mx-auto px-4 py-5">
         {tab === "overview" && (
           <div className="space-y-5">
-            <AlertBanner alerts={data.alerts} onSectorClick={openSector} />
-            <IndexCards indices={data.indices} />
-            <MarketBreadth sectors={data.sectors} />
             <SectorHeatmap sectors={data.sectors} onSectorClick={openSector} />
+            <MarketBreadth sectors={data.sectors} />
+            <IndexCards indices={data.indices} />
+            <AlertBanner alerts={data.alerts} onSectorClick={openSector} />
           </div>
         )}
 
