@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchSectorData, fetchMajorIndices } from "@/lib/krx";
+import { fetchSectorData, fetchMajorIndices, fetchTopStocks } from "@/lib/krx";
 import { analyzeSectors } from "@/lib/analysis";
 
 // 1시간 캐시
@@ -8,9 +8,10 @@ export const preferredRegion = "icn1"; // 서울 리전 (네이버 API 지연 �
 
 export async function GET() {
   try {
-    const [sectors, majorIndices] = await Promise.all([
+    const [sectors, majorIndices, topStocks] = await Promise.all([
       fetchSectorData(),
       fetchMajorIndices(),
+      fetchTopStocks(),
     ]);
 
     if (sectors.length === 0) {
@@ -23,7 +24,7 @@ export async function GET() {
       );
     }
 
-    const result = analyzeSectors(sectors, majorIndices);
+    const result = analyzeSectors(sectors, majorIndices, topStocks);
 
     return NextResponse.json({
       success: true,

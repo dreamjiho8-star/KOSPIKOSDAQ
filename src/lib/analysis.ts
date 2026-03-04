@@ -1,4 +1,4 @@
-import type { SectorData, IndexPrice, IndexInfo } from "./krx";
+import type { SectorData, IndexPrice, IndexInfo, TopStock } from "./krx";
 
 export type SectorStatus =
   | "normal"
@@ -32,6 +32,7 @@ export interface AnalysisResult {
   sectors: SectorAnalysis[];
   alerts: SectorAnalysis[];
   indices: IndexAnalysis[];
+  topStocks: TopStock[];
   avgSectorReturn: number;
   medianSectorReturn: number;
   lastUpdated: string;
@@ -83,7 +84,8 @@ export function analyzeSectors(
     prev: IndexPrice | null;
     weekAgo: IndexPrice | null;
     monthAgo: IndexPrice | null;
-  }[]
+  }[],
+  topStocks: TopStock[] = []
 ): AnalysisResult {
   const rates = sectors.map((s) => s.changeRate);
   const avgReturn = mean(rates);
@@ -209,6 +211,7 @@ export function analyzeSectors(
     sectors: analyzed,
     alerts,
     indices,
+    topStocks,
     avgSectorReturn: avgReturn,
     medianSectorReturn: medReturn,
     lastUpdated: new Date().toISOString(),

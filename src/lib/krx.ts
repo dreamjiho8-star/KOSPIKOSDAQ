@@ -12,6 +12,14 @@ export interface SectorData {
   changeRate: number; // 등락률 (%)
 }
 
+// 트리맵용 종목 데이터 (marketValue API에서 가져옴)
+export interface TopStock {
+  code: string;
+  name: string;
+  changeRate: number;
+  marketCap: number; // 억원
+}
+
 export interface IndexPrice {
   date: string; // YYYYMMDD
   open: number;
@@ -67,6 +75,33 @@ export async function fetchSectorData(): Promise<SectorData[]> {
   }
 
   return sectors;
+}
+
+// 시총 상위 종목 가져오기 (KOSPI 80 + KOSDAQ 40 = 2 API calls only)
+export async function fetchTopStocks(): Promise<TopStock[]> {
+  const [kospiRes, kosdaqRes] = await Promise.all([
+    fetch(
+      "https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page=1&pageSize=80",
+      { headers: { "User-Agent": UA } }
+    ),
+    fetch(
+      "https://m.stock.naver.com/api/stocks/marketValue/KOSDAQ?page=1&pageSize=40",
+      { headers: { "User-Agent": UA } }
+    ),
+  ]);
+
+  const kospiData = await kospiRes.json();
+  const kosdaqData = await kosdaqRes.json();
+
+  const parse = (stocks: Record<string, string>[]): TopStock[] =>
+    (stocks || []).map((s) => ({
+      code: s.itemCode,
+      name: s.stockName,
+      changeRate: parseFloat(s.fluctuationsRatio) || 0,
+      marketCap: parseInt((s.marketValue || "0").replace(/,/g, "")) || 0,
+    }));
+
+  return [...parse(kospiData.stocks), ...parse(kosdaqData.stocks)];
 }
 
 // 네이버 fchart API에서 지수 과거 데이터 가져오기
