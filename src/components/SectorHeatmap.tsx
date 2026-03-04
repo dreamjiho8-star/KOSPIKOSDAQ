@@ -1,7 +1,35 @@
 "use client";
 
 import { useMemo, useRef, useState, useEffect, useCallback } from "react";
-import type { TopStock } from "@/lib/krx";
+import type { SectorAnalysis } from "@/lib/analysis";
+
+// ─── 섹터 시총 가중치 (대략적 비율) ───
+
+function sectorWeight(name: string): number {
+  if (/반도체/.test(name)) return 500;
+  if (/은행/.test(name)) return 150;
+  if (/자동차/.test(name)) return 130;
+  if (/바이오/.test(name)) return 100;
+  if (/인터넷/.test(name)) return 80;
+  if (/전기전자|전자장비/.test(name)) return 70;
+  if (/석유화학|화학/.test(name)) return 60;
+  if (/철강|금속/.test(name)) return 50;
+  if (/보험/.test(name)) return 45;
+  if (/증권/.test(name)) return 40;
+  if (/제약/.test(name)) return 40;
+  if (/통신장비|통신서비스|통신/.test(name)) return 35;
+  if (/건설/.test(name)) return 35;
+  if (/에너지|전력|유틸/.test(name)) return 30;
+  if (/식품|음식|음료/.test(name)) return 28;
+  if (/운송|항공|해운/.test(name)) return 25;
+  if (/미디어|엔터|게임|소프트/.test(name)) return 25;
+  if (/부동산/.test(name)) return 22;
+  if (/금융|기타금융/.test(name)) return 20;
+  if (/기계|조선/.test(name)) return 20;
+  if (/섬유|의류|패션/.test(name)) return 15;
+  if (/종이|목재|가구/.test(name)) return 10;
+  return 18;
+}
 
 // ─── Color helpers (-6% ~ +6% range) ───
 
@@ -33,7 +61,7 @@ function textColor(rate: number): string {
 // ─── Squarified treemap layout ───
 
 interface Rect {
-  stock: TopStock;
+  sector: SectorAnalysis;
   x: number;
   y: number;
   w: number;
@@ -41,15 +69,15 @@ interface Rect {
 }
 
 function squarifiedLayout(
-  stocks: TopStock[],
+  sectors: SectorAnalysis[],
   width: number,
   height: number
 ): Rect[] {
-  if (width <= 0 || height <= 0 || stocks.length === 0) return [];
+  if (width <= 0 || height <= 0 || sectors.length === 0) return [];
 
-  const items = [...stocks]
-    .sort((a, b) => b.marketCap - a.marketCap)
-    .map((s) => ({ stock: s, value: s.marketCap }));
+  const items = [...sectors]
+    .map((s) => ({ sector: s, value: sectorWeight(s.name) }))
+    .sort((a, b) => b.value - a.value);
 
   const rects: Rect[] = [];
   let remaining = items;
@@ -61,7 +89,7 @@ function squarifiedLayout(
 
   while (remaining.length > 0) {
     if (remaining.length === 1) {
-      rects.push({ stock: remaining[0].stock, x, y, w, h });
+      rects.push({ sector: remaining[0].sector, x, y, w, h });
       break;
     }
 
@@ -101,7 +129,7 @@ function squarifiedLayout(
       let cy = y;
       for (const item of row) {
         const itemH = (item.value / rowSum) * h;
-        rects.push({ stock: item.stock, x, y: cy, w: rowLen, h: itemH });
+        rects.push({ sector: item.sector, x, y: cy, w: rowLen, h: itemH });
         cy += itemH;
       }
       x += rowLen;
@@ -110,7 +138,7 @@ function squarifiedLayout(
       let cx = x;
       for (const item of row) {
         const itemW = (item.value / rowSum) * w;
-        rects.push({ stock: item.stock, x: cx, y, w: itemW, h: rowLen });
+        rects.push({ sector: item.sector, x: cx, y, w: itemW, h: rowLen });
         cx += itemW;
       }
       y += rowLen;
@@ -127,46 +155,44 @@ function squarifiedLayout(
 // ─── Treemap rendering (shared between inline and fullscreen) ───
 
 function TreemapCanvas({
-  stocks,
+  sectors,
   width,
   height,
   fullscreen,
+  onSectorClick,
 }: {
-  stocks: TopStock[];
+  sectors: SectorAnalysis[];
   width: number;
   height: number;
   fullscreen?: boolean;
+  onSectorClick?: (code: string, name: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
   const rects = useMemo(
-    () => squarifiedLayout(stocks, width, height),
-    [stocks, width, height]
+    () => squarifiedLayout(sectors, width, height),
+    [sectors, width, height]
   );
 
   const showTooltip = useCallback(
-    (e: React.MouseEvent, stock: TopStock) => {
+    (e: React.MouseEvent, sector: SectorAnalysis) => {
       const tip = tooltipRef.current;
       const container = containerRef.current;
       if (!tip || !container) return;
       const cr = container.getBoundingClientRect();
       let tx = e.clientX - cr.left + 12;
-      let ty = e.clientY - cr.top - 44;
-      if (tx + 160 > cr.width) tx = tx - 180;
+      let ty = e.clientY - cr.top - 40;
+      if (tx + 150 > cr.width) tx = tx - 170;
       if (ty < 0) ty = e.clientY - cr.top + 16;
       tip.style.left = `${tx}px`;
       tip.style.top = `${ty}px`;
       tip.style.opacity = "1";
-      const capStr =
-        stock.marketCap >= 10000
-          ? `${(stock.marketCap / 10000).toFixed(1)}조`
-          : `${stock.marketCap.toLocaleString()}억`;
-      tip.innerHTML = `<strong>${stock.name}</strong><br/><span style="color:${
-        stock.changeRate >= 0 ? "#ef4444" : "#3b82f6"
+      tip.innerHTML = `<strong>${sector.name}</strong><br/><span style="color:${
+        sector.changeRate >= 0 ? "#ef4444" : "#3b82f6"
       };font-weight:700">${
-        stock.changeRate >= 0 ? "+" : ""
-      }${stock.changeRate.toFixed(2)}%</span><br/><span style="font-size:10px;opacity:0.7">시총 ${capStr}원</span>`;
+        sector.changeRate >= 0 ? "+" : ""
+      }${sector.changeRate.toFixed(2)}%</span>`;
     },
     []
   );
@@ -185,9 +211,9 @@ function TreemapCanvas({
       style={{ height: `${height}px` }}
     >
       {rects.map((rect) => {
-        const { stock, x, y, w, h } = rect;
-        const bg = heatBg(stock.changeRate);
-        const tc = textColor(stock.changeRate);
+        const { sector, x, y, w, h } = rect;
+        const bg = heatBg(sector.changeRate);
+        const tc = textColor(sector.changeRate);
         const nameSize = fullscreen
           ? Math.min(14, Math.max(8, Math.min(w / 6, h / 3)))
           : Math.min(11, Math.max(6, Math.min(w / 7, h / 3)));
@@ -198,11 +224,12 @@ function TreemapCanvas({
         const showRate = w > 24 && h > 12;
 
         return (
-          <div
-            key={stock.code}
-            onMouseMove={(e) => showTooltip(e, stock)}
+          <button
+            key={sector.code}
+            onClick={() => onSectorClick?.(sector.code, sector.name)}
+            onMouseMove={(e) => showTooltip(e, sector)}
             onMouseLeave={hideTooltip}
-            className="absolute flex flex-col items-center justify-center overflow-hidden hover:brightness-110 cursor-default transition-[filter]"
+            className="absolute flex flex-col items-center justify-center overflow-hidden hover:brightness-110 active:brightness-90 transition-[filter]"
             style={{
               left: `${x + GAP / 2}px`,
               top: `${y + GAP / 2}px`,
@@ -217,7 +244,7 @@ function TreemapCanvas({
                 className="font-bold truncate leading-tight px-0.5"
                 style={{ fontSize: `${nameSize}px`, maxWidth: `${w - 4}px` }}
               >
-                {stock.name}
+                {sector.name}
               </span>
             )}
             {showRate && (
@@ -225,11 +252,11 @@ function TreemapCanvas({
                 className="font-extrabold leading-tight"
                 style={{ fontSize: `${rateSize}px` }}
               >
-                {stock.changeRate >= 0 ? "+" : ""}
-                {stock.changeRate.toFixed(2)}%
+                {sector.changeRate >= 0 ? "+" : ""}
+                {sector.changeRate.toFixed(2)}%
               </span>
             )}
-          </div>
+          </button>
         );
       })}
 
@@ -244,7 +271,13 @@ function TreemapCanvas({
 
 // ─── Main component ───
 
-export default function SectorHeatmap({ stocks }: { stocks: TopStock[] }) {
+export default function SectorHeatmap({
+  sectors,
+  onSectorClick,
+}: {
+  sectors: SectorAnalysis[];
+  onSectorClick?: (code: string, name: string) => void;
+}) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
@@ -262,7 +295,6 @@ export default function SectorHeatmap({ stocks }: { stocks: TopStock[] }) {
     return () => ro.disconnect();
   }, []);
 
-  // ESC to close fullscreen
   useEffect(() => {
     if (!fullscreen) return;
     const handler = (e: KeyboardEvent) => {
@@ -277,7 +309,7 @@ export default function SectorHeatmap({ stocks }: { stocks: TopStock[] }) {
     [containerWidth]
   );
 
-  if (stocks.length === 0) return null;
+  if (sectors.length === 0) return null;
 
   return (
     <>
@@ -286,7 +318,7 @@ export default function SectorHeatmap({ stocks }: { stocks: TopStock[] }) {
         className="bg-card border border-card-border rounded-2xl p-4"
       >
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-bold">시장 히트맵</h2>
+          <h2 className="text-base font-bold">섹터 히트맵</h2>
           <button
             onClick={() => setFullscreen(true)}
             className="text-xs text-blue-500 hover:text-blue-600 font-medium"
@@ -297,9 +329,10 @@ export default function SectorHeatmap({ stocks }: { stocks: TopStock[] }) {
 
         {containerWidth > 0 && (
           <TreemapCanvas
-            stocks={stocks}
+            sectors={sectors}
             width={containerWidth}
             height={mapHeight}
+            onSectorClick={onSectorClick}
           />
         )}
 
@@ -339,12 +372,7 @@ export default function SectorHeatmap({ stocks }: { stocks: TopStock[] }) {
         >
           <div className="w-full max-w-6xl bg-card rounded-2xl p-4 shadow-2xl max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-bold">
-                시장 히트맵{" "}
-                <span className="text-xs text-muted font-normal ml-1">
-                  시총 상위 {stocks.length}개 종목
-                </span>
-              </h2>
+              <h2 className="text-lg font-bold">섹터 히트맵</h2>
               <button
                 onClick={() => setFullscreen(false)}
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition text-lg"
@@ -354,10 +382,11 @@ export default function SectorHeatmap({ stocks }: { stocks: TopStock[] }) {
             </div>
             <div className="flex-1 min-h-0">
               <TreemapCanvas
-                stocks={stocks}
+                sectors={sectors}
                 width={Math.min(1152, window.innerWidth - 64)}
                 height={Math.min(680, window.innerHeight - 160)}
                 fullscreen
+                onSectorClick={onSectorClick}
               />
             </div>
             <div className="flex items-center justify-center gap-1 mt-3">

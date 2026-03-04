@@ -158,7 +158,7 @@ export default function Home() {
             <AlertBanner alerts={data.alerts} onSectorClick={openSector} />
             <IndexCards indices={data.indices} />
             <MarketBreadth sectors={data.sectors} />
-            <SectorHeatmap stocks={data.topStocks} />
+            <SectorHeatmap sectors={data.sectors} onSectorClick={openSector} />
           </div>
         )}
 
