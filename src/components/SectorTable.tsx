@@ -82,7 +82,7 @@ export default function SectorTable({
   sectors: SectorAnalysis[];
   onSectorClick?: (code: string, name: string) => void;
 }) {
-  const [mode, setMode] = useState<ViewMode>("rate");
+  const [mode, setMode] = useState<ViewMode>("category");
   const [asc, setAsc] = useState(true);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
