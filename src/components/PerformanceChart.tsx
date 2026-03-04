@@ -128,16 +128,16 @@ export default function PerformanceChart({
 
   return (
     <div className="mb-6">
-      <h2 className="text-lg font-bold mb-3">등락률 상하위</h2>
+      <h2 className="text-lg font-bold mb-3">업종 등락률 TOP 10</h2>
       <div className="space-y-3">
         <ChartBox
-          title="하위 10개"
-          items={bottom10}
+          title="상승 상위 10개"
+          items={top10}
           onSectorClick={onSectorClick}
         />
         <ChartBox
-          title="상위 10개"
-          items={top10}
+          title="하락 상위 10개"
+          items={bottom10}
           onSectorClick={onSectorClick}
         />
       </div>
