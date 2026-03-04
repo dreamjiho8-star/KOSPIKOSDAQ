@@ -256,12 +256,15 @@ export async function fetchSectorDetail(
   // 1. 업종 내 종목 코드 가져오기
   const { sectorName, stockCodes } = await parseSectorStockCodes(sectorCode);
 
-  // 2. 모든 종목 정보 병렬 조회 (최대 30개)
-  const allStocks = (
-    await Promise.all(
-      stockCodes.slice(0, 30).map((c) => fetchStockFullData(c))
-    )
-  ).filter((s): s is StockFullData => s !== null && s.price > 0);
+  // 2. 모든 종목 정보 병렬 조회 (배치 단위 30, 전체 처리)
+  const allStocks: StockFullData[] = [];
+  for (let i = 0; i < stockCodes.length; i += 30) {
+    const batch = stockCodes.slice(i, i + 30);
+    const results = await Promise.all(batch.map((c) => fetchStockFullData(c)));
+    for (const s of results) {
+      if (s !== null && s.price > 0) allStocks.push(s);
+    }
+  }
 
   // 3. 시총 상위 5
   const topByMarketCap = [...allStocks]
