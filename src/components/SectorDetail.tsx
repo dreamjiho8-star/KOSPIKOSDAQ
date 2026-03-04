@@ -185,8 +185,15 @@ function rateToColor(rate: number): string {
   return `rgb(${r},${g},${b})`;
 }
 
+function formatMcap(v: number) {
+  return v >= 10000
+    ? `${(v / 10000).toFixed(1)}조`
+    : `${v.toLocaleString()}억`;
+}
+
 function MiniTreemap({ stocks }: { stocks: StockInSector[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
 
   useLayoutEffect(() => {
@@ -207,16 +214,54 @@ function MiniTreemap({ stocks }: { stocks: StockInSector[] }) {
 
   const cells = size.w > 0 ? squarify(items, 0, 0, size.w, size.h) : [];
 
+  const showTooltip = (stock: StockInSector, e: React.MouseEvent | React.TouchEvent) => {
+    const tip = tooltipRef.current;
+    const container = containerRef.current;
+    if (!tip || !container) return;
+    const cr = container.getBoundingClientRect();
+    let cx: number, cy: number;
+    if ("touches" in e) {
+      cx = e.touches[0].clientX - cr.left;
+      cy = e.touches[0].clientY - cr.top;
+    } else {
+      cx = e.clientX - cr.left;
+      cy = e.clientY - cr.top;
+    }
+    tip.innerHTML = `<div class="font-bold">${stock.name}</div><div class="font-mono">${stock.changeRate >= 0 ? "+" : ""}${stock.changeRate.toFixed(2)}%</div><div class="text-[10px] opacity-80">시총 ${formatMcap(stock.marketCap)}</div>`;
+    tip.style.opacity = "1";
+    // Position: prefer above cursor, shift if near edges
+    const tipW = 140;
+    let left = cx - tipW / 2;
+    if (left < 0) left = 0;
+    if (left + tipW > size.w) left = size.w - tipW;
+    let top = cy - 60;
+    if (top < 0) top = cy + 20;
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
+  };
+
+  const hideTooltip = () => {
+    const tip = tooltipRef.current;
+    if (tip) tip.style.opacity = "0";
+  };
+
   return (
     <div ref={containerRef} className="w-full">
       {size.w > 0 && (
-        <div className="relative" style={{ width: size.w, height: size.h }}>
+        <div
+          className="relative"
+          style={{ width: size.w, height: size.h }}
+          onMouseLeave={hideTooltip}
+          onTouchEnd={hideTooltip}
+        >
           {cells.map(({ stock, rect }) => {
-            const tooSmall = rect.w < 40 || rect.h < 30;
+            const showName = rect.w >= 40 && rect.h >= 24;
+            const showRate = rect.w >= 35 && rect.h >= 38;
+            const showMcap = rect.w >= 40 && rect.h >= 52;
             return (
               <div
                 key={stock.code}
-                className="absolute flex flex-col items-center justify-center text-white overflow-hidden"
+                className="absolute flex flex-col items-center justify-center text-white overflow-hidden cursor-pointer"
                 style={{
                   left: rect.x + 1,
                   top: rect.y + 1,
@@ -225,26 +270,35 @@ function MiniTreemap({ stocks }: { stocks: StockInSector[] }) {
                   backgroundColor: rateToColor(stock.changeRate),
                   borderRadius: 6,
                 }}
+                onMouseEnter={(e) => showTooltip(stock, e)}
+                onMouseMove={(e) => showTooltip(stock, e)}
+                onTouchStart={(e) => showTooltip(stock, e)}
               >
-                {!tooSmall && (
-                  <>
-                    <span className="font-bold text-xs leading-tight text-center px-1 truncate max-w-full">
-                      {stock.name}
-                    </span>
-                    <span className="text-[11px] font-mono font-bold mt-0.5">
-                      {stock.changeRate >= 0 ? "+" : ""}
-                      {stock.changeRate.toFixed(2)}%
-                    </span>
-                    <span className="text-[9px] opacity-70 mt-0.5">
-                      {stock.marketCap >= 10000
-                        ? `${(stock.marketCap / 10000).toFixed(1)}조`
-                        : `${stock.marketCap.toLocaleString()}억`}
-                    </span>
-                  </>
+                {showName && (
+                  <span className="font-bold text-xs leading-tight text-center px-1 truncate max-w-full">
+                    {stock.name}
+                  </span>
+                )}
+                {showRate && (
+                  <span className="text-[11px] font-mono font-bold mt-0.5">
+                    {stock.changeRate >= 0 ? "+" : ""}
+                    {stock.changeRate.toFixed(2)}%
+                  </span>
+                )}
+                {showMcap && (
+                  <span className="text-[9px] opacity-70 mt-0.5">
+                    {formatMcap(stock.marketCap)}
+                  </span>
                 )}
               </div>
             );
           })}
+          {/* Tooltip */}
+          <div
+            ref={tooltipRef}
+            className="absolute pointer-events-none bg-slate-900 text-white text-xs rounded-lg px-3 py-2 text-center shadow-lg transition-opacity duration-150 z-10"
+            style={{ opacity: 0, width: 140 }}
+          />
         </div>
       )}
     </div>
