@@ -170,19 +170,23 @@ function squarify(
 }
 
 function rateToColor(rate: number): string {
-  const clamped = Math.max(-8, Math.min(8, rate));
-  if (clamped < 0) {
-    const t = Math.min(1, Math.abs(clamped) / 6);
-    const r = Math.round(30 + t * (0 - 30));
-    const g = Math.round(100 + t * (100 - 100));
-    const b = Math.round(200 + t * (255 - 200));
-    return `rgb(${r},${g},${b})`;
-  }
-  const t = Math.min(1, clamped / 6);
-  const r = Math.round(200 + t * (255 - 200));
-  const g = Math.round(60 + t * (30 - 60));
-  const b = Math.round(60 + t * (30 - 60));
-  return `rgb(${r},${g},${b})`;
+  if (rate >= 6) return "#450a0a";
+  if (rate >= 5) return "#7f1d1d";
+  if (rate >= 4) return "#991b1b";
+  if (rate >= 3) return "#b91c1c";
+  if (rate >= 2) return "#dc2626";
+  if (rate >= 1) return "#ef4444";
+  if (rate >= 0.3) return "#f87171";
+  if (rate > 0) return "#fca5a5";
+  if (rate === 0) return "#4b5563";
+  if (rate > -0.3) return "#93c5fd";
+  if (rate > -1) return "#60a5fa";
+  if (rate > -2) return "#3b82f6";
+  if (rate > -3) return "#2563eb";
+  if (rate > -4) return "#1d4ed8";
+  if (rate > -5) return "#1e3a8a";
+  if (rate > -6) return "#172554";
+  return "#0c1a3d";
 }
 
 function formatMcap(v: number) {
@@ -326,16 +330,20 @@ function MiniTreemap({ stocks }: { stocks: StockInSector[] }) {
               const showName = rect.w >= 40 && rect.h >= 24;
               const showRate = rect.w >= 35 && rect.h >= 38;
               const showMcap = rect.w >= 40 && rect.h >= 52;
+              const tc = Math.abs(stock.changeRate) < 0.3
+                ? (stock.changeRate >= 0 ? "#7f1d1d" : "#1e3a8a")
+                : "#ffffff";
               return (
                 <div
                   key={stock.code}
-                  className="absolute flex flex-col items-center justify-center text-white overflow-hidden cursor-pointer"
+                  className="absolute flex flex-col items-center justify-center overflow-hidden cursor-pointer"
                   style={{
                     left: rect.x + 1,
                     top: rect.y + 1,
                     width: Math.max(0, rect.w - 2),
                     height: Math.max(0, rect.h - 2),
                     backgroundColor: rateToColor(stock.changeRate),
+                    color: tc,
                     borderRadius: 6,
                   }}
                   onClick={() => { hideTooltip(); setSelectedStock(stock); }}
