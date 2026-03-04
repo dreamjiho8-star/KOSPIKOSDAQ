@@ -438,7 +438,7 @@ export async function fetchInvestorBySector(): Promise<InvestorTrendsResult> {
     ),
   ];
 
-  // 2. 전체 종목을 한번에 병렬 호출 (60개면 충분히 가능)
+  // 2. 배치 40개씩 병렬 호출 (한번에 120개는 Vercel에서 터짐)
   interface StockInvestor {
     code: string;
     name: string;
@@ -451,51 +451,56 @@ export async function fetchInvestorBySector(): Promise<InvestorTrendsResult> {
     individualShares: number;
   }
 
-  const results = await Promise.all(
-    allCodes.map(async (code): Promise<StockInvestor | null> => {
-      try {
-        const res = await fetchWithTimeout(
-          `https://m.stock.naver.com/api/stock/${code}/integration`,
-          5000
-        );
-        if (!res.ok) return null;
-        const data = await res.json();
-        const industryCode = data.industryCode;
-        if (!industryCode) return null;
-        const name = data.stockName || code;
+  const fetchOne = async (code: string): Promise<StockInvestor | null> => {
+    try {
+      const res = await fetchWithTimeout(
+        `https://m.stock.naver.com/api/stock/${code}/integration`,
+        5000
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+      const industryCode = data.industryCode;
+      if (!industryCode) return null;
+      const name = data.stockName || code;
 
-        let price = 0;
-        let lastClosePrice = 0;
-        let marketCap = 0;
-        for (const info of data.totalInfos || []) {
-          if (info.code === "lastClosePrice") {
-            lastClosePrice = parseNum(info.value || "0");
-            price = lastClosePrice;
-          } else if (info.code === "marketValue") {
-            marketCap = parseMarketCapStr(info.value || "");
-          }
+      let price = 0;
+      let lastClosePrice = 0;
+      let marketCap = 0;
+      for (const info of data.totalInfos || []) {
+        if (info.code === "lastClosePrice") {
+          lastClosePrice = parseNum(info.value || "0");
+          price = lastClosePrice;
+        } else if (info.code === "marketValue") {
+          marketCap = parseMarketCapStr(info.value || "");
         }
-        const trends = data.dealTrendInfos || [];
-        if (trends.length > 0) {
-          const cp = parseNum(trends[0].closePrice || "0");
-          if (cp > 0) price = cp;
-        }
-        if (price <= 0) return null;
-
-        const t = trends[0] || {};
-        return {
-          code, name, industryCode, price, lastClosePrice, marketCap,
-          foreignShares: parseNum(t.foreignerPureBuyQuant || "0"),
-          institutionShares: parseNum(t.organPureBuyQuant || "0"),
-          individualShares: parseNum(t.individualPureBuyQuant || "0"),
-        };
-      } catch {
-        return null;
       }
-    })
-  );
+      const trends = data.dealTrendInfos || [];
+      if (trends.length > 0) {
+        const cp = parseNum(trends[0].closePrice || "0");
+        if (cp > 0) price = cp;
+      }
+      if (price <= 0) return null;
 
-  const stockResults = results.filter((r): r is StockInvestor => r !== null);
+      const t = trends[0] || {};
+      return {
+        code, name, industryCode, price, lastClosePrice, marketCap,
+        foreignShares: parseNum(t.foreignerPureBuyQuant || "0"),
+        institutionShares: parseNum(t.organPureBuyQuant || "0"),
+        individualShares: parseNum(t.individualPureBuyQuant || "0"),
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const stockResults: StockInvestor[] = [];
+  for (let i = 0; i < allCodes.length; i += 40) {
+    const batch = allCodes.slice(i, i + 40);
+    const batchResults = await Promise.all(batch.map(fetchOne));
+    for (const r of batchResults) {
+      if (r) stockResults.push(r);
+    }
+  }
 
   // 3. 섹터별 집계 (억원 변환)
   const sectorMap = new Map<
