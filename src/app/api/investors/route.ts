@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchInvestorBySector } from "@/lib/krx";
 
 export const revalidate = 3600;
+export const preferredRegion = "icn1"; // 서울 리전 (네이버 API 지연 최소화)
 
 export async function GET() {
   try {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchSectorDetail } from "@/lib/krx";
 
 export const revalidate = 3600;
+export const preferredRegion = "icn1"; // 서울 리전
 
 export async function GET(
   _request: NextRequest,

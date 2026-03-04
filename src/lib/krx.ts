@@ -494,8 +494,8 @@ export async function fetchInvestorBySector(): Promise<InvestorTrendsResult> {
   };
 
   const stockResults: StockInvestor[] = [];
-  for (let i = 0; i < allCodes.length; i += 40) {
-    const batch = allCodes.slice(i, i + 40);
+  for (let i = 0; i < allCodes.length; i += 20) {
+    const batch = allCodes.slice(i, i + 20);
     const batchResults = await Promise.all(batch.map(fetchOne));
     for (const r of batchResults) {
       if (r) stockResults.push(r);
