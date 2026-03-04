@@ -157,7 +157,7 @@ export default function Home() {
   const flatCount = data.sectors.length - upCount - downCount;
 
   return (
-    <div className="min-h-screen pb-20 sm:pb-6">
+    <div className="min-h-screen pb-20 sm:pb-6 overflow-x-hidden">
       {pulling && (
         <div
           className="fixed top-0 left-0 right-0 z-50 flex items-center justify-center transition-transform duration-200"

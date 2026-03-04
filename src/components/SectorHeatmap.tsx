@@ -530,20 +530,20 @@ export default function SectorHeatmap({
   sectors: SectorAnalysis[];
   onSectorClick?: (code: string, name: string) => void;
 }) {
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const treemapAreaRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
-    const el = wrapperRef.current;
+    const el = treemapAreaRef.current;
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        setContainerWidth(entry.contentRect.width);
+        setContainerWidth(Math.floor(entry.contentRect.width));
       }
     });
     ro.observe(el);
-    setContainerWidth(el.clientWidth);
+    setContainerWidth(Math.floor(el.getBoundingClientRect().width));
     return () => ro.disconnect();
   }, []);
 
@@ -556,10 +556,7 @@ export default function SectorHeatmap({
 
   return (
     <>
-      <div
-        ref={wrapperRef}
-        className="bg-card border border-card-border rounded-2xl p-4"
-      >
+      <div className="bg-card border border-card-border rounded-2xl p-4 overflow-hidden min-w-0">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-bold">섹터 히트맵</h2>
           <button
@@ -570,14 +567,16 @@ export default function SectorHeatmap({
           </button>
         </div>
 
-        {containerWidth > 0 && (
-          <TreemapCanvas
-            sectors={sectors}
-            width={containerWidth}
-            height={mapHeight}
-            onSectorClick={onSectorClick}
-          />
-        )}
+        <div ref={treemapAreaRef} className="w-full">
+          {containerWidth > 0 && (
+            <TreemapCanvas
+              sectors={sectors}
+              width={containerWidth}
+              height={mapHeight}
+              onSectorClick={onSectorClick}
+            />
+          )}
+        </div>
 
         <div className="flex items-center justify-center gap-1 mt-3">
           <span className="text-[10px] text-muted">-6%</span>
