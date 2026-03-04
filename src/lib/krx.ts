@@ -389,17 +389,41 @@ export interface InvestorTrendsResult {
   lastUpdated: string;
 }
 
+// 타임아웃 fetch 헬퍼
+async function fetchWithTimeout(url: string, timeoutMs: number = 5000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA },
+      signal: controller.signal,
+    });
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// 인메모리 캐시 (Vercel 서버리스 웜 인스턴스용)
+let investorCache: { data: InvestorTrendsResult; ts: number } | null = null;
+const CACHE_TTL = 60 * 60 * 1000; // 1시간
+
 // 시총 상위 종목을 가져와서 섹터별 투자자 순매수 집계
 export async function fetchInvestorBySector(): Promise<InvestorTrendsResult> {
-  // 1. KOSPI 상위 80 + KOSDAQ 상위 40 종목 코드 수집
+  // 캐시 확인
+  if (investorCache && Date.now() - investorCache.ts < CACHE_TTL) {
+    return investorCache.data;
+  }
+
+  // 1. KOSPI 상위 80 + KOSDAQ 상위 40 종목 (120개 유지, 데이터 품질 보존)
   const [kospiRes, kosdaqRes] = await Promise.all([
-    fetch(
+    fetchWithTimeout(
       "https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page=1&pageSize=80",
-      { headers: { "User-Agent": UA } }
+      8000
     ),
-    fetch(
+    fetchWithTimeout(
       "https://m.stock.naver.com/api/stocks/marketValue/KOSDAQ?page=1&pageSize=40",
-      { headers: { "User-Agent": UA } }
+      8000
     ),
   ]);
 
@@ -414,7 +438,7 @@ export async function fetchInvestorBySector(): Promise<InvestorTrendsResult> {
     ),
   ];
 
-  // 2. 각 종목의 integration API에서 industryCode + 투자자 + 시총/등락률 추출 (배치 20)
+  // 2. 전체 종목을 한번에 병렬 호출 (60개면 충분히 가능)
   interface StockInvestor {
     code: string;
     name: string;
@@ -427,63 +451,51 @@ export async function fetchInvestorBySector(): Promise<InvestorTrendsResult> {
     individualShares: number;
   }
 
-  const stockResults: StockInvestor[] = [];
-  for (let i = 0; i < allCodes.length; i += 20) {
-    const batch = allCodes.slice(i, i + 20);
-    const results = await Promise.all(
-      batch.map(async (code) => {
-        try {
-          const res = await fetch(
-            `https://m.stock.naver.com/api/stock/${code}/integration`,
-            { headers: { "User-Agent": UA } }
-          );
-          if (!res.ok) return null;
-          const data = await res.json();
-          const industryCode = data.industryCode;
-          if (!industryCode) return null;
-          const name = data.stockName || code;
+  const results = await Promise.all(
+    allCodes.map(async (code): Promise<StockInvestor | null> => {
+      try {
+        const res = await fetchWithTimeout(
+          `https://m.stock.naver.com/api/stock/${code}/integration`,
+          5000
+        );
+        if (!res.ok) return null;
+        const data = await res.json();
+        const industryCode = data.industryCode;
+        if (!industryCode) return null;
+        const name = data.stockName || code;
 
-          // totalInfos에서 가격, 시총 추출
-          let price = 0;
-          let lastClosePrice = 0;
-          let marketCap = 0;
-          for (const info of data.totalInfos || []) {
-            if (info.code === "lastClosePrice") {
-              lastClosePrice = parseNum(info.value || "0");
-              price = lastClosePrice;
-            } else if (info.code === "marketValue") {
-              marketCap = parseMarketCapStr(info.value || "");
-            }
+        let price = 0;
+        let lastClosePrice = 0;
+        let marketCap = 0;
+        for (const info of data.totalInfos || []) {
+          if (info.code === "lastClosePrice") {
+            lastClosePrice = parseNum(info.value || "0");
+            price = lastClosePrice;
+          } else if (info.code === "marketValue") {
+            marketCap = parseMarketCapStr(info.value || "");
           }
-          const trends = data.dealTrendInfos || [];
-          if (trends.length > 0) {
-            const cp = parseNum(trends[0].closePrice || "0");
-            if (cp > 0) price = cp;
-          }
-          if (price <= 0) return null;
-
-          // 투자자 순매수 (주)
-          const t = trends[0] || {};
-          return {
-            code,
-            name,
-            industryCode,
-            price,
-            lastClosePrice,
-            marketCap,
-            foreignShares: parseNum(t.foreignerPureBuyQuant || "0"),
-            institutionShares: parseNum(t.organPureBuyQuant || "0"),
-            individualShares: parseNum(t.individualPureBuyQuant || "0"),
-          } as StockInvestor;
-        } catch {
-          return null;
         }
-      })
-    );
-    for (const r of results) {
-      if (r) stockResults.push(r);
-    }
-  }
+        const trends = data.dealTrendInfos || [];
+        if (trends.length > 0) {
+          const cp = parseNum(trends[0].closePrice || "0");
+          if (cp > 0) price = cp;
+        }
+        if (price <= 0) return null;
+
+        const t = trends[0] || {};
+        return {
+          code, name, industryCode, price, lastClosePrice, marketCap,
+          foreignShares: parseNum(t.foreignerPureBuyQuant || "0"),
+          institutionShares: parseNum(t.organPureBuyQuant || "0"),
+          individualShares: parseNum(t.individualPureBuyQuant || "0"),
+        };
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  const stockResults = results.filter((r): r is StockInvestor => r !== null);
 
   // 3. 섹터별 집계 (억원 변환)
   const sectorMap = new Map<
@@ -494,10 +506,7 @@ export async function fetchInvestorBySector(): Promise<InvestorTrendsResult> {
     const toOk = (shares: number) =>
       Math.round((shares * s.price) / 100000000);
     const existing = sectorMap.get(s.industryCode) || {
-      foreignNet: 0,
-      institutionNet: 0,
-      individualNet: 0,
-      count: 0,
+      foreignNet: 0, institutionNet: 0, individualNet: 0, count: 0,
     };
     existing.foreignNet += toOk(s.foreignShares);
     existing.institutionNet += toOk(s.institutionShares);
@@ -529,39 +538,39 @@ export async function fetchInvestorBySector(): Promise<InvestorTrendsResult> {
         ? Math.round(((s.price - s.lastClosePrice) / s.lastClosePrice) * 10000) / 100
         : 0;
     return {
-      code: s.code,
-      name: s.name,
+      code: s.code, name: s.name,
       sectorCode: String(s.industryCode),
       sectorName: nameMap.get(String(s.industryCode)) || `업종 ${s.industryCode}`,
-      price: s.price,
-      changeRate,
-      marketCap: s.marketCap,
+      price: s.price, changeRate, marketCap: s.marketCap,
     };
   });
 
-  return { sectors, treemapStocks, lastUpdated: new Date().toISOString() };
+  const result = { sectors, treemapStocks, lastUpdated: new Date().toISOString() };
+  investorCache = { data: result, ts: Date.now() };
+  return result;
 }
 
-// 주요 지수들의 최신 시세 가져오기
+// 주요 지수들의 최신 시세 가져오기 (병렬 조회)
 export async function fetchMajorIndices(): Promise<
   { info: IndexInfo; latest: IndexPrice; prev: IndexPrice | null; weekAgo: IndexPrice | null; monthAgo: IndexPrice | null }[]
 > {
-  const results = [];
+  type IndexResult = { info: IndexInfo; latest: IndexPrice; prev: IndexPrice | null; weekAgo: IndexPrice | null; monthAgo: IndexPrice | null };
 
-  for (const info of MAJOR_INDICES) {
-    try {
+  const settled = await Promise.allSettled(
+    MAJOR_INDICES.map(async (info): Promise<IndexResult | null> => {
       const history = await fetchIndexHistory(info.code, 25);
-      if (history.length > 0) {
-        const latest = history[history.length - 1];
-        const prev = history.length > 1 ? history[history.length - 2] : null;
-        const weekAgo = history.length > 5 ? history[history.length - 6] : null;
-        const monthAgo = history.length > 20 ? history[history.length - 21] : null;
-        results.push({ info, latest, prev, weekAgo, monthAgo });
-      }
-    } catch {
-      continue;
-    }
-  }
+      if (history.length === 0) return null;
+      const latest = history[history.length - 1];
+      const prev = history.length > 1 ? history[history.length - 2] : null;
+      const weekAgo = history.length > 5 ? history[history.length - 6] : null;
+      const monthAgo = history.length > 20 ? history[history.length - 21] : null;
+      return { info, latest, prev, weekAgo, monthAgo };
+    })
+  );
 
+  const results: IndexResult[] = [];
+  for (const r of settled) {
+    if (r.status === "fulfilled" && r.value) results.push(r.value);
+  }
   return results;
 }
