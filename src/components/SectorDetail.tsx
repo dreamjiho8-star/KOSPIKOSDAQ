@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useLayoutEffect } from "react";
 import type { SectorDetailResult, StockInSector } from "@/lib/krx";
 
 interface Props {
@@ -102,6 +102,157 @@ function StockRow({
   );
 }
 
+/* ── squarify (미니 트리맵용) ── */
+interface Rect { x: number; y: number; w: number; h: number }
+interface TreeItem { stock: StockInSector; weight: number; rect: Rect }
+
+function squarify(
+  items: { stock: StockInSector; weight: number }[],
+  x: number, y: number, w: number, h: number,
+): TreeItem[] {
+  if (items.length === 0) return [];
+  if (items.length === 1) return [{ ...items[0], rect: { x, y, w, h } }];
+
+  const total = items.reduce((s, i) => s + i.weight, 0);
+  const sorted = [...items].sort((a, b) => b.weight - a.weight);
+  const result: TreeItem[] = [];
+
+  let cx = x, cy = y, cw = w, ch = h;
+  let remaining = [...sorted];
+  let remTotal = total;
+
+  while (remaining.length > 0) {
+    const isHoriz = cw >= ch;
+    const side = isHoriz ? ch : cw;
+    let row: typeof remaining = [];
+    let rowTotal = 0;
+    let bestRatio = Infinity;
+
+    for (const item of remaining) {
+      const testRow = [...row, item];
+      const testTotal = rowTotal + item.weight;
+      const stripLen = (testTotal / remTotal) * (isHoriz ? cw : ch);
+      let worstRatio = 0;
+      for (const r of testRow) {
+        const cellLen = (r.weight / testTotal) * side;
+        const ratio = Math.max(stripLen / cellLen, cellLen / stripLen);
+        worstRatio = Math.max(worstRatio, ratio);
+      }
+      if (worstRatio <= bestRatio) {
+        bestRatio = worstRatio;
+        row = testRow;
+        rowTotal = testTotal;
+      } else break;
+    }
+
+    const stripFrac = rowTotal / remTotal;
+    const stripLen = stripFrac * (isHoriz ? cw : ch);
+    let offset = 0;
+    for (const item of row) {
+      const cellFrac = item.weight / rowTotal;
+      const cellLen = cellFrac * side;
+      result.push({
+        ...item,
+        rect: isHoriz
+          ? { x: cx, y: cy + offset, w: stripLen, h: cellLen }
+          : { x: cx + offset, y: cy, w: cellLen, h: stripLen },
+      });
+      offset += cellLen;
+    }
+
+    if (isHoriz) { cx += stripLen; cw -= stripLen; }
+    else { cy += stripLen; ch -= stripLen; }
+
+    remaining = remaining.slice(row.length);
+    remTotal -= rowTotal;
+  }
+  return result;
+}
+
+function rateToColor(rate: number): string {
+  const clamped = Math.max(-8, Math.min(8, rate));
+  if (clamped < 0) {
+    const t = Math.min(1, Math.abs(clamped) / 6);
+    const r = Math.round(30 + t * (0 - 30));
+    const g = Math.round(100 + t * (100 - 100));
+    const b = Math.round(200 + t * (255 - 200));
+    return `rgb(${r},${g},${b})`;
+  }
+  const t = Math.min(1, clamped / 6);
+  const r = Math.round(200 + t * (255 - 200));
+  const g = Math.round(60 + t * (30 - 60));
+  const b = Math.round(60 + t * (30 - 60));
+  return `rgb(${r},${g},${b})`;
+}
+
+function MiniTreemap({ stocks }: { stocks: StockInSector[] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width } = entry.contentRect;
+      setSize({ w: width, h: Math.max(200, width * 0.55) });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const items = stocks.map((s) => ({
+    stock: s,
+    weight: Math.max(s.marketCap, 1),
+  }));
+
+  const cells = size.w > 0 ? squarify(items, 0, 0, size.w, size.h) : [];
+
+  return (
+    <div ref={containerRef} className="w-full">
+      {size.w > 0 && (
+        <div className="relative" style={{ width: size.w, height: size.h }}>
+          {cells.map(({ stock, rect }) => {
+            const tooSmall = rect.w < 40 || rect.h < 30;
+            return (
+              <div
+                key={stock.code}
+                className="absolute flex flex-col items-center justify-center text-white overflow-hidden"
+                style={{
+                  left: rect.x + 1,
+                  top: rect.y + 1,
+                  width: Math.max(0, rect.w - 2),
+                  height: Math.max(0, rect.h - 2),
+                  backgroundColor: rateToColor(stock.changeRate),
+                  borderRadius: 6,
+                }}
+              >
+                {!tooSmall && (
+                  <>
+                    <span className="font-bold text-xs leading-tight text-center px-1 truncate max-w-full">
+                      {stock.name}
+                    </span>
+                    <span className="text-[11px] font-mono font-bold mt-0.5">
+                      {stock.changeRate >= 0 ? "+" : ""}
+                      {stock.changeRate.toFixed(2)}%
+                    </span>
+                    <span className="text-[9px] opacity-70 mt-0.5">
+                      {stock.marketCap >= 10000
+                        ? `${(stock.marketCap / 10000).toFixed(1)}조`
+                        : `${stock.marketCap.toLocaleString()}억`}
+                    </span>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type DetailTab = "heatmap" | "info";
+
 export default function SectorDetail({
   sectorCode,
   sectorName,
@@ -111,6 +262,7 @@ export default function SectorDetail({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedStock, setExpandedStock] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<DetailTab>("heatmap");
 
   useEffect(() => {
     setLoading(true);
@@ -146,14 +298,36 @@ export default function SectorDetail({
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}
-        <div className="sticky top-0 bg-card border-b border-card-border px-4 py-3 flex items-center justify-between rounded-t-2xl z-10">
-          <h3 className="font-bold text-lg">{sectorName}</h3>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-muted transition"
-          >
-            ✕
-          </button>
+        <div className="sticky top-0 bg-card border-b border-card-border rounded-t-2xl z-10">
+          <div className="px-4 py-3 flex items-center justify-between">
+            <h3 className="font-bold text-lg">{sectorName}</h3>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-muted transition"
+            >
+              ✕
+            </button>
+          </div>
+          {data && (
+            <div className="flex px-4 gap-1 pb-2">
+              {([
+                ["heatmap", "히트맵"],
+                ["info", "상세 정보"],
+              ] as [DetailTab, string][]).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setDetailTab(key)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-full border transition ${
+                    detailTab === key
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "bg-card text-muted border-card-border hover:border-slate-400"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="p-4 space-y-5">
@@ -170,7 +344,11 @@ export default function SectorDetail({
             </div>
           )}
 
-          {data && (
+          {data && detailTab === "heatmap" && (
+            <MiniTreemap stocks={data.topByMarketCap} />
+          )}
+
+          {data && detailTab === "info" && (
             <>
               {/* 섹터 밸류에이션 요약 */}
               <section>
