@@ -175,6 +175,39 @@ export async function fetchIndexHistory(
   return prices;
 }
 
+// ---- 종목별 가격 히스토리 (기간별 수익률 계산용) ----
+
+let priceHistoryCache: { data: Map<string, IndexPrice[]>; ts: number } | null =
+  null;
+const PRICE_HISTORY_TTL = 3 * 60 * 60 * 1000; // 3시간
+
+export async function fetchStockPriceHistories(
+  codes: string[]
+): Promise<Map<string, IndexPrice[]>> {
+  if (priceHistoryCache && Date.now() - priceHistoryCache.ts < PRICE_HISTORY_TTL) {
+    return priceHistoryCache.data;
+  }
+
+  const map = new Map<string, IndexPrice[]>();
+
+  for (let i = 0; i < codes.length; i += 20) {
+    const batch = codes.slice(i, i + 20);
+    await Promise.allSettled(
+      batch.map(async (code) => {
+        try {
+          const prices = await fetchIndexHistory(code, 260);
+          if (prices.length > 0) map.set(code, prices);
+        } catch {
+          // skip failed
+        }
+      })
+    );
+  }
+
+  priceHistoryCache = { data: map, ts: Date.now() };
+  return map;
+}
+
 // ---- Sector Detail Types ----
 
 export interface StockInSector {

@@ -1,5 +1,89 @@
 import type { SectorData, IndexPrice, IndexInfo, TopStock } from "./krx";
 
+export type Period = "1d" | "1w" | "1m" | "3m" | "ytd" | "1y";
+
+// 기간별 섹터 수익률 계산 (종목 히스토리 기반)
+export function computeSectorReturns(
+  period: Period,
+  topStocks: TopStock[],
+  stockSectorMap: Map<string, string>,
+  priceHistories: Map<string, IndexPrice[]>
+): Map<string, number> {
+  const sectorReturns = new Map<string, number>();
+
+  // 섹터별로 종목 그룹화
+  const sectorStocks = new Map<
+    string,
+    { code: string; marketCap: number }[]
+  >();
+  for (const stock of topStocks) {
+    const sectorCode = stockSectorMap.get(stock.code);
+    if (!sectorCode) continue;
+    if (!sectorStocks.has(sectorCode)) sectorStocks.set(sectorCode, []);
+    sectorStocks.get(sectorCode)!.push({
+      code: stock.code,
+      marketCap: stock.marketCap,
+    });
+  }
+
+  // 각 섹터의 시총 가중 수익률 계산
+  for (const [sectorCode, stocks] of sectorStocks) {
+    let weightedReturn = 0;
+    let totalWeight = 0;
+
+    for (const stock of stocks) {
+      const history = priceHistories.get(stock.code);
+      if (!history || history.length < 2) continue;
+
+      const latest = history[history.length - 1];
+      const targetIdx = getTargetIndex(history, period);
+      if (targetIdx < 0) continue;
+
+      const target = history[targetIdx];
+      if (target.close <= 0) continue;
+
+      const ret = ((latest.close - target.close) / target.close) * 100;
+      weightedReturn += ret * stock.marketCap;
+      totalWeight += stock.marketCap;
+    }
+
+    if (totalWeight > 0) {
+      sectorReturns.set(
+        sectorCode,
+        Math.round((weightedReturn / totalWeight) * 100) / 100
+      );
+    }
+  }
+
+  return sectorReturns;
+}
+
+function getTargetIndex(history: IndexPrice[], period: Period): number {
+  const len = history.length;
+  if (len < 2) return -1;
+
+  switch (period) {
+    case "1w":
+      return Math.max(0, len - 6); // ~5 영업일 전
+    case "1m":
+      return Math.max(0, len - 22); // ~21 영업일 전
+    case "3m":
+      return Math.max(0, len - 64); // ~63 영업일 전
+    case "ytd": {
+      // 올해 첫 영업일 찾기
+      const currentYear = new Date().getFullYear().toString();
+      for (let i = 0; i < len; i++) {
+        if (history[i].date.startsWith(currentYear)) return i;
+      }
+      return 0;
+    }
+    case "1y":
+      return 0; // 가장 오래된 데이터 (count=260 ≈ 1년)
+    default:
+      return -1;
+  }
+}
+
 export type SectorStatus =
   | "normal"
   | "crash"

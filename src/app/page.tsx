@@ -8,7 +8,7 @@ import IndexCards from "@/components/IndexCards";
 import SectorDetail from "@/components/SectorDetail";
 import MarketBreadth from "@/components/MarketBreadth";
 import SectorHeatmap from "@/components/SectorHeatmap";
-import type { AnalysisResult } from "@/lib/analysis";
+import type { AnalysisResult, Period } from "@/lib/analysis";
 
 function usePullToRefresh(onRefresh: () => Promise<void>) {
   const [pulling, setPulling] = useState(false);
@@ -81,6 +81,7 @@ export default function Home() {
   } | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [dark, setDark] = useState(false);
+  const [period, setPeriod] = useState<Period>("1d");
 
   useEffect(() => {
     setDark(document.documentElement.classList.contains("dark"));
@@ -93,8 +94,9 @@ export default function Home() {
     localStorage.setItem("theme", next ? "dark" : "light");
   };
 
-  const fetchData = useCallback(() => {
-    return fetch("/api/sectors")
+  const fetchData = useCallback((p?: Period) => {
+    const q = p ?? period;
+    return fetch(`/api/sectors?period=${q}`)
       .then((res) => res.json())
       .then((json) => {
         if (json.success) {
@@ -106,7 +108,7 @@ export default function Home() {
       })
       .catch(() => setError("서버에 연결할 수 없습니다."))
       .finally(() => setLoading(false));
-  }, []);
+  }, [period]);
 
   const { pulling, pullY, refreshing } = usePullToRefresh(fetchData);
 
@@ -238,21 +240,42 @@ export default function Home() {
             </div>
           </div>
 
-          <nav className="hidden sm:flex gap-1 mt-3">
-            {TABS.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition ${
-                  tab === t.key
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "text-muted hover:bg-slate-200 dark:hover:bg-slate-700"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </nav>
+          <div className="flex items-center justify-between mt-3 gap-3">
+            <nav className="hidden sm:flex gap-1">
+              {TABS.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition ${
+                    tab === t.key
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "text-muted hover:bg-slate-200 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </nav>
+            <div className="flex gap-0.5 bg-slate-200/60 dark:bg-slate-700/60 rounded-lg p-0.5">
+              {(["1d", "1w", "1m", "3m", "ytd", "1y"] as Period[]).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => {
+                    setPeriod(p);
+                    setLoading(true);
+                    fetchData(p);
+                  }}
+                  className={`px-2 py-1 text-[11px] font-semibold rounded-md transition ${
+                    period === p
+                      ? "bg-white dark:bg-slate-600 text-foreground shadow-sm"
+                      : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  {p.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </header>
 
