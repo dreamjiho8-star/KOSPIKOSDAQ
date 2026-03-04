@@ -35,6 +35,42 @@ export interface IndexInfo {
   market: string; // KOSPI, KOSDAQ, KRX
 }
 
+// 종목코드 → 섹터코드 매핑 (79개 섹터 상세 페이지에서 추출)
+let stockSectorCache: { map: Map<string, string>; ts: number } | null = null;
+const SECTOR_MAP_TTL = 6 * 60 * 60 * 1000; // 6시간 (섹터 매핑은 자주 바뀌지 않음)
+
+export async function fetchStockSectorMap(
+  sectorCodes: string[]
+): Promise<Map<string, string>> {
+  // 캐시 확인
+  if (stockSectorCache && Date.now() - stockSectorCache.ts < SECTOR_MAP_TTL) {
+    return stockSectorCache.map;
+  }
+
+  const map = new Map<string, string>();
+
+  // 배치 20개씩 병렬 호출
+  for (let i = 0; i < sectorCodes.length; i += 20) {
+    const batch = sectorCodes.slice(i, i + 20);
+    const results = await Promise.allSettled(
+      batch.map(async (code) => {
+        const url = `https://finance.naver.com/sise/sise_group_detail.naver?type=upjong&no=${code}`;
+        const res = await fetchWithTimeout(url, 4000);
+        const buffer = Buffer.from(await res.arrayBuffer());
+        const html = iconv.decode(buffer, "EUC-KR");
+        const codeRegex = /item\/main\.naver\?code=(\d{6})/g;
+        let m;
+        while ((m = codeRegex.exec(html)) !== null) {
+          if (!map.has(m[1])) map.set(m[1], code);
+        }
+      })
+    );
+  }
+
+  stockSectorCache = { map, ts: Date.now() };
+  return map;
+}
+
 // 주요 시장 지수 코드
 export const MAJOR_INDICES: IndexInfo[] = [
   { code: "KOSPI", name: "코스피", market: "KOSPI" },

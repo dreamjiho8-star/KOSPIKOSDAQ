@@ -13,6 +13,7 @@ export interface SectorAnalysis {
   code: string;
   name: string;
   changeRate: number; // 오늘 등락률 (%)
+  marketCap: number; // 섹터 내 상위 종목 시총 합계 (억원, 0이면 데이터 없음)
   status: SectorStatus;
   statusLabel: string;
   reason: string;
@@ -85,8 +86,23 @@ export function analyzeSectors(
     weekAgo: IndexPrice | null;
     monthAgo: IndexPrice | null;
   }[],
-  topStocks: TopStock[] = []
+  topStocks: TopStock[] = [],
+  stockSectorMap?: Map<string, string>
 ): AnalysisResult {
+  // 섹터별 시총 계산 (topStocks + stockSectorMap 이용)
+  const sectorMarketCapMap = new Map<string, number>();
+  if (stockSectorMap) {
+    for (const stock of topStocks) {
+      const sectorCode = stockSectorMap.get(stock.code);
+      if (sectorCode) {
+        sectorMarketCapMap.set(
+          sectorCode,
+          (sectorMarketCapMap.get(sectorCode) || 0) + stock.marketCap
+        );
+      }
+    }
+  }
+
   const rates = sectors.map((s) => s.changeRate);
   const avgReturn = mean(rates);
   const medReturn = median(rates);
@@ -152,6 +168,7 @@ export function analyzeSectors(
       code: s.code,
       name: s.name,
       changeRate: s.changeRate,
+      marketCap: sectorMarketCapMap.get(s.code) || 0,
       status,
       statusLabel: STATUS_LABELS[status],
       reason,

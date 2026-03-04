@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchSectorData, fetchMajorIndices, fetchTopStocks } from "@/lib/krx";
+import { fetchSectorData, fetchMajorIndices, fetchTopStocks, fetchStockSectorMap } from "@/lib/krx";
 import { analyzeSectors } from "@/lib/analysis";
 
 // 1시간 캐시
@@ -24,7 +24,16 @@ export async function GET() {
       );
     }
 
-    const result = analyzeSectors(sectors, majorIndices, topStocks);
+    // 섹터별 시총 계산을 위해 종목→섹터 매핑 가져오기 (캐시됨, 6시간)
+    const sectorCodes = sectors.map((s) => s.code);
+    let stockSectorMap: Map<string, string> | undefined;
+    try {
+      stockSectorMap = await fetchStockSectorMap(sectorCodes);
+    } catch {
+      // 매핑 실패 시 기존 regex 기반 가중치 사용
+    }
+
+    const result = analyzeSectors(sectors, majorIndices, topStocks, stockSectorMap);
 
     return NextResponse.json({
       success: true,

@@ -4,7 +4,8 @@ import { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import type { SectorAnalysis } from "@/lib/analysis";
 import { type Category, CATEGORY_WEIGHT, getCategory } from "@/lib/categories";
 
-function sectorWeight(name: string): number {
+// 실제 시총 데이터가 없을 때 사용하는 폴백 가중치
+function fallbackWeight(name: string): number {
   if (/반도체/.test(name)) return 500;
   if (/은행/.test(name)) return 150;
   if (/자동차$/.test(name)) return 130;
@@ -28,6 +29,12 @@ function sectorWeight(name: string): number {
   if (/섬유|의류/.test(name)) return 15;
   if (/종이|목재|가구/.test(name)) return 10;
   return 18;
+}
+
+function sectorWeight(s: SectorAnalysis): number {
+  // 실제 시총 데이터가 있으면 사용 (억원 → 상대적 가중치로 스케일링)
+  if (s.marketCap > 0) return s.marketCap;
+  return fallbackWeight(s.name);
 }
 
 // ─── Color helpers (-6% ~ +6% range) ───
@@ -198,7 +205,7 @@ function buildTreemap(
 
   const groups: CategoryGroup[] = [];
   for (const [category, secs] of groupMap) {
-    const totalWeight = secs.reduce((sum, s) => sum + sectorWeight(s.name), 0);
+    const totalWeight = secs.reduce((sum, s) => sum + sectorWeight(s), 0);
     groups.push({ category, sectors: secs, totalWeight });
   }
 
@@ -245,7 +252,7 @@ function buildTreemap(
 
     const sectorItems: LayoutItem[] = group.sectors.map((s) => ({
       id: s.code,
-      value: sectorWeight(s.name),
+      value: sectorWeight(s),
     }));
 
     const sRects = squarify(sectorItems, sx, sy, sw, sh);
