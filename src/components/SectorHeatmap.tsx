@@ -269,6 +269,100 @@ function TreemapCanvas({
   );
 }
 
+// ─── Fullscreen modal (ResizeObserver-based) ───
+
+function FullscreenModal({
+  sectors,
+  onSectorClick,
+  onClose,
+}: {
+  sectors: SectorAnalysis[];
+  onSectorClick?: (code: string, name: string) => void;
+  onClose: () => void;
+}) {
+  const areaRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const el = areaRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setSize({
+          w: entry.contentRect.width,
+          h: entry.contentRect.height,
+        });
+      }
+    });
+    ro.observe(el);
+    setSize({ w: el.clientWidth, h: el.clientHeight });
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-6xl bg-card rounded-2xl p-4 shadow-2xl flex flex-col" style={{ height: "min(90vh, 800px)" }}>
+        <div className="flex items-center justify-between mb-3 shrink-0">
+          <h2 className="text-lg font-bold">섹터 히트맵</h2>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition text-lg"
+          >
+            X
+          </button>
+        </div>
+        <div ref={areaRef} className="flex-1 min-h-0 overflow-hidden">
+          {size.w > 0 && size.h > 0 && (
+            <TreemapCanvas
+              sectors={sectors}
+              width={size.w}
+              height={size.h}
+              fullscreen
+              onSectorClick={onSectorClick}
+            />
+          )}
+        </div>
+        <div className="flex items-center justify-center gap-1 mt-3 shrink-0">
+          <span className="text-[10px] text-muted">-6%</span>
+          <div className="flex gap-0.5">
+            {[
+              "#172554",
+              "#1d4ed8",
+              "#3b82f6",
+              "#60a5fa",
+              "#4b5563",
+              "#fca5a5",
+              "#ef4444",
+              "#b91c1c",
+              "#7f1d1d",
+            ].map((c, i) => (
+              <div
+                key={i}
+                className="w-5 h-2.5 rounded-sm"
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </div>
+          <span className="text-[10px] text-muted">+6%</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───
 
 export default function SectorHeatmap({
@@ -294,15 +388,6 @@ export default function SectorHeatmap({
     setContainerWidth(el.clientWidth);
     return () => ro.disconnect();
   }, []);
-
-  useEffect(() => {
-    if (!fullscreen) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setFullscreen(false);
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [fullscreen]);
 
   const mapHeight = useMemo(
     () => Math.max(280, containerWidth * 0.55),
@@ -364,56 +449,11 @@ export default function SectorHeatmap({
 
       {/* Fullscreen modal */}
       {fullscreen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setFullscreen(false);
-          }}
-        >
-          <div className="w-full max-w-6xl bg-card rounded-2xl p-4 shadow-2xl max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-bold">섹터 히트맵</h2>
-              <button
-                onClick={() => setFullscreen(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition text-lg"
-              >
-                X
-              </button>
-            </div>
-            <div className="flex-1 min-h-0">
-              <TreemapCanvas
-                sectors={sectors}
-                width={Math.min(1152, window.innerWidth - 64)}
-                height={Math.min(680, window.innerHeight - 160)}
-                fullscreen
-                onSectorClick={onSectorClick}
-              />
-            </div>
-            <div className="flex items-center justify-center gap-1 mt-3">
-              <span className="text-[10px] text-muted">-6%</span>
-              <div className="flex gap-0.5">
-                {[
-                  "#172554",
-                  "#1d4ed8",
-                  "#3b82f6",
-                  "#60a5fa",
-                  "#4b5563",
-                  "#fca5a5",
-                  "#ef4444",
-                  "#b91c1c",
-                  "#7f1d1d",
-                ].map((c, i) => (
-                  <div
-                    key={i}
-                    className="w-5 h-2.5 rounded-sm"
-                    style={{ backgroundColor: c }}
-                  />
-                ))}
-              </div>
-              <span className="text-[10px] text-muted">+6%</span>
-            </div>
-          </div>
-        </div>
+        <FullscreenModal
+          sectors={sectors}
+          onSectorClick={onSectorClick}
+          onClose={() => setFullscreen(false)}
+        />
       )}
     </>
   );
