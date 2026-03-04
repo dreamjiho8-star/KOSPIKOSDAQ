@@ -4,6 +4,16 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "KRX 섹터 모니터",
   description: "KRX 섹터별 지수 급락/부진/급등 감지 대시보드",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "KRX섹터",
+  },
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {

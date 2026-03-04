@@ -1,0 +1,22 @@
+{
+  "name": "KRX 섹터 모니터",
+  "short_name": "KRX섹터",
+  "description": "KRX 섹터별 등락률 및 이상 감지 대시보드",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
