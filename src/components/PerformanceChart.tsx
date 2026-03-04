@@ -131,12 +131,12 @@ export default function PerformanceChart({
       <h2 className="text-lg font-bold mb-3">업종 등락률 TOP 10</h2>
       <div className="space-y-3">
         <ChartBox
-          title="상승 상위 10개"
+          title="상승률 TOP 10"
           items={top10}
           onSectorClick={onSectorClick}
         />
         <ChartBox
-          title="하락 상위 10개"
+          title="하락률 TOP 10"
           items={bottom10}
           onSectorClick={onSectorClick}
         />
