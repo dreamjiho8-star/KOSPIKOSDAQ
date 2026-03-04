@@ -112,6 +112,14 @@ export interface StockInSector {
   price: number;
   changeRate: number;
   marketCap: number; // 시가총액 (억원)
+  per: number | null; // PER (배)
+  pbr: number | null; // PBR (배)
+  eps: number | null; // EPS (원)
+  bps: number | null; // BPS (원)
+  dividendYield: number | null; // 배당수익률 (%)
+  high52w: number | null; // 52주 최고
+  low52w: number | null; // 52주 최저
+  foreignRate: number | null; // 외인소진율 (%)
 }
 
 export interface InvestorTrading {
@@ -120,12 +128,19 @@ export interface InvestorTrading {
   individualNet: number; // 개인 순매수 (억원)
 }
 
+export interface SectorValuation {
+  avgPer: number | null;
+  avgPbr: number | null;
+  avgDividendYield: number | null;
+}
+
 export interface SectorDetailResult {
   sectorCode: string;
   sectorName: string;
   topByMarketCap: StockInSector[];
   topByVolatility: StockInSector[];
   investor: InvestorTrading;
+  valuation: SectorValuation;
 }
 
 const UA =
@@ -145,6 +160,13 @@ function parseMarketCapStr(value: string): number {
 // 콤마 제거 후 숫자 파싱
 function parseNum(s: string): number {
   return parseInt(s.replace(/[,+]/g, "")) || 0;
+}
+
+// "26.23배", "0.97%", "6,564원" 등에서 숫자 추출
+function parseValNum(s: string | undefined): number | null {
+  if (!s) return null;
+  const num = parseFloat(s.replace(/[,+]/g, ""));
+  return isNaN(num) ? null : num;
 }
 
 // 업종 상세 페이지에서 종목 코드 추출
@@ -172,7 +194,7 @@ async function parseSectorStockCodes(sectorCode: string): Promise<{
   return { sectorName, stockCodes: codes };
 }
 
-// integration 엔드포인트에서 종목 전체 정보 가져오기 (시총, 가격, 등락률, 투자자)
+// integration 엔드포인트에서 종목 전체 정보 가져오기
 interface StockFullData extends StockInSector {
   foreignNetOk: number;
   institutionNetOk: number;
@@ -192,15 +214,32 @@ async function fetchStockFullData(
 
     const name = data.stockName || "";
 
-    // totalInfos에서 시가총액, 전일가 추출
+    // totalInfos에서 시가총액, 전일가, 밸류에이션 추출
     let marketCap = 0;
     let lastClosePrice = 0;
+    let per: number | null = null;
+    let pbr: number | null = null;
+    let eps: number | null = null;
+    let bps: number | null = null;
+    let dividendYield: number | null = null;
+    let high52w: number | null = null;
+    let low52w: number | null = null;
+    let foreignRate: number | null = null;
+
     const infos = data.totalInfos || [];
     for (const info of infos) {
-      if (info.code === "marketValue") {
-        marketCap = parseMarketCapStr(info.value || "");
-      } else if (info.code === "lastClosePrice") {
-        lastClosePrice = parseNum(info.value || "0");
+      const val = info.value || "";
+      switch (info.code) {
+        case "marketValue": marketCap = parseMarketCapStr(val); break;
+        case "lastClosePrice": lastClosePrice = parseNum(val); break;
+        case "per": per = parseValNum(val); break;
+        case "pbr": pbr = parseValNum(val); break;
+        case "eps": eps = parseValNum(val); break;
+        case "bps": bps = parseValNum(val); break;
+        case "dividendYieldRatio": dividendYield = parseValNum(val); break;
+        case "highPriceOf52Weeks": high52w = parseNum(val) || null; break;
+        case "lowPriceOf52Weeks": low52w = parseNum(val) || null; break;
+        case "foreignRate": foreignRate = parseValNum(val); break;
       }
     }
 
@@ -240,6 +279,14 @@ async function fetchStockFullData(
       price,
       changeRate: Math.round(changeRate * 100) / 100,
       marketCap,
+      per,
+      pbr,
+      eps,
+      bps,
+      dividendYield,
+      high52w,
+      low52w,
+      foreignRate,
       foreignNetOk,
       institutionNetOk,
       individualNetOk,
@@ -267,16 +314,17 @@ export async function fetchSectorDetail(
   }
 
   // 3. 시총 상위 5
+  const strip = ({ foreignNetOk, institutionNetOk, individualNetOk, ...rest }: StockFullData): StockInSector => rest;
   const topByMarketCap = [...allStocks]
     .sort((a, b) => b.marketCap - a.marketCap)
     .slice(0, 5)
-    .map(({ foreignNetOk, institutionNetOk, individualNetOk, ...rest }) => rest);
+    .map(strip);
 
   // 4. 등락률 변동 상위 5 (절대값)
   const topByVolatility = [...allStocks]
     .sort((a, b) => Math.abs(b.changeRate) - Math.abs(a.changeRate))
     .slice(0, 5)
-    .map(({ foreignNetOk, institutionNetOk, individualNetOk, ...rest }) => rest);
+    .map(strip);
 
   // 5. 투자자별 매매동향 (시총 상위 종목 합산)
   const sortedByMcap = [...allStocks].sort(
@@ -292,13 +340,206 @@ export async function fetchSectorDetail(
     individualNet += s.individualNetOk;
   }
 
+  // 6. 섹터 평균 밸류에이션 (유효한 값만)
+  const pers = allStocks.filter((s) => s.per !== null && s.per > 0).map((s) => s.per!);
+  const pbrs = allStocks.filter((s) => s.pbr !== null && s.pbr > 0).map((s) => s.pbr!);
+  const divs = allStocks.filter((s) => s.dividendYield !== null && s.dividendYield > 0).map((s) => s.dividendYield!);
+
+  const avg = (arr: number[]) => arr.length > 0 ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 100) / 100 : null;
+
   return {
     sectorCode,
     sectorName,
     topByMarketCap,
     topByVolatility,
     investor: { foreignNet, institutionNet, individualNet },
+    valuation: {
+      avgPer: avg(pers),
+      avgPbr: avg(pbrs),
+      avgDividendYield: avg(divs),
+    },
   };
+}
+
+// ---- 투자자별 순매수 TOP 섹터 ----
+
+export interface SectorInvestorData {
+  sectorCode: string;
+  sectorName: string;
+  foreignNet: number; // 억원
+  institutionNet: number;
+  individualNet: number;
+  stockCount: number; // 집계에 사용된 종목 수
+}
+
+// 트리맵용 종목 데이터
+export interface TreemapStock {
+  code: string;
+  name: string;
+  sectorCode: string;
+  sectorName: string;
+  price: number;
+  changeRate: number;
+  marketCap: number; // 억원
+}
+
+export interface InvestorTrendsResult {
+  sectors: SectorInvestorData[];
+  treemapStocks: TreemapStock[];
+  lastUpdated: string;
+}
+
+// 시총 상위 종목을 가져와서 섹터별 투자자 순매수 집계
+export async function fetchInvestorBySector(): Promise<InvestorTrendsResult> {
+  // 1. KOSPI 상위 80 + KOSDAQ 상위 40 종목 코드 수집
+  const [kospiRes, kosdaqRes] = await Promise.all([
+    fetch(
+      "https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page=1&pageSize=80",
+      { headers: { "User-Agent": UA } }
+    ),
+    fetch(
+      "https://m.stock.naver.com/api/stocks/marketValue/KOSDAQ?page=1&pageSize=40",
+      { headers: { "User-Agent": UA } }
+    ),
+  ]);
+
+  const kospiData = await kospiRes.json();
+  const kosdaqData = await kosdaqRes.json();
+  const allCodes: string[] = [
+    ...(kospiData.stocks || []).map(
+      (s: { itemCode: string }) => s.itemCode
+    ),
+    ...(kosdaqData.stocks || []).map(
+      (s: { itemCode: string }) => s.itemCode
+    ),
+  ];
+
+  // 2. 각 종목의 integration API에서 industryCode + 투자자 + 시총/등락률 추출 (배치 20)
+  interface StockInvestor {
+    code: string;
+    name: string;
+    industryCode: number;
+    price: number;
+    lastClosePrice: number;
+    marketCap: number;
+    foreignShares: number;
+    institutionShares: number;
+    individualShares: number;
+  }
+
+  const stockResults: StockInvestor[] = [];
+  for (let i = 0; i < allCodes.length; i += 20) {
+    const batch = allCodes.slice(i, i + 20);
+    const results = await Promise.all(
+      batch.map(async (code) => {
+        try {
+          const res = await fetch(
+            `https://m.stock.naver.com/api/stock/${code}/integration`,
+            { headers: { "User-Agent": UA } }
+          );
+          if (!res.ok) return null;
+          const data = await res.json();
+          const industryCode = data.industryCode;
+          if (!industryCode) return null;
+          const name = data.stockName || code;
+
+          // totalInfos에서 가격, 시총 추출
+          let price = 0;
+          let lastClosePrice = 0;
+          let marketCap = 0;
+          for (const info of data.totalInfos || []) {
+            if (info.code === "lastClosePrice") {
+              lastClosePrice = parseNum(info.value || "0");
+              price = lastClosePrice;
+            } else if (info.code === "marketValue") {
+              marketCap = parseMarketCapStr(info.value || "");
+            }
+          }
+          const trends = data.dealTrendInfos || [];
+          if (trends.length > 0) {
+            const cp = parseNum(trends[0].closePrice || "0");
+            if (cp > 0) price = cp;
+          }
+          if (price <= 0) return null;
+
+          // 투자자 순매수 (주)
+          const t = trends[0] || {};
+          return {
+            code,
+            name,
+            industryCode,
+            price,
+            lastClosePrice,
+            marketCap,
+            foreignShares: parseNum(t.foreignerPureBuyQuant || "0"),
+            institutionShares: parseNum(t.organPureBuyQuant || "0"),
+            individualShares: parseNum(t.individualPureBuyQuant || "0"),
+          } as StockInvestor;
+        } catch {
+          return null;
+        }
+      })
+    );
+    for (const r of results) {
+      if (r) stockResults.push(r);
+    }
+  }
+
+  // 3. 섹터별 집계 (억원 변환)
+  const sectorMap = new Map<
+    number,
+    { foreignNet: number; institutionNet: number; individualNet: number; count: number }
+  >();
+  for (const s of stockResults) {
+    const toOk = (shares: number) =>
+      Math.round((shares * s.price) / 100000000);
+    const existing = sectorMap.get(s.industryCode) || {
+      foreignNet: 0,
+      institutionNet: 0,
+      individualNet: 0,
+      count: 0,
+    };
+    existing.foreignNet += toOk(s.foreignShares);
+    existing.institutionNet += toOk(s.institutionShares);
+    existing.individualNet += toOk(s.individualShares);
+    existing.count += 1;
+    sectorMap.set(s.industryCode, existing);
+  }
+
+  // 4. 섹터 이름 매핑 (기존 섹터 목록 활용)
+  const sectorList = await fetchSectorData();
+  const nameMap = new Map(sectorList.map((s) => [s.code, s.name]));
+
+  const sectors: SectorInvestorData[] = [];
+  for (const [code, data] of sectorMap.entries()) {
+    sectors.push({
+      sectorCode: String(code),
+      sectorName: nameMap.get(String(code)) || `업종 ${code}`,
+      foreignNet: data.foreignNet,
+      institutionNet: data.institutionNet,
+      individualNet: data.individualNet,
+      stockCount: data.count,
+    });
+  }
+
+  // 5. 트리맵용 종목 데이터 구성
+  const treemapStocks: TreemapStock[] = stockResults.map((s) => {
+    const changeRate =
+      s.lastClosePrice > 0
+        ? Math.round(((s.price - s.lastClosePrice) / s.lastClosePrice) * 10000) / 100
+        : 0;
+    return {
+      code: s.code,
+      name: s.name,
+      sectorCode: String(s.industryCode),
+      sectorName: nameMap.get(String(s.industryCode)) || `업종 ${s.industryCode}`,
+      price: s.price,
+      changeRate,
+      marketCap: s.marketCap,
+    };
+  });
+
+  return { sectors, treemapStocks, lastUpdated: new Date().toISOString() };
 }
 
 // 주요 지수들의 최신 시세 가져오기

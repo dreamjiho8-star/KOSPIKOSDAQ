@@ -45,26 +45,27 @@ function ChartBox({
   if (items.length === 0) return null;
 
   return (
-    <div className="bg-white rounded-xl border p-4">
-      <h3 className="text-sm font-bold text-gray-600 mb-2">{title}</h3>
+    <div className="bg-card border border-card-border rounded-2xl p-4">
+      <h3 className="text-sm font-bold text-muted mb-2">{title}</h3>
       <ResponsiveContainer width="100%" height={items.length * 28 + 20}>
         <BarChart
           data={items}
           layout="vertical"
           margin={{ left: 0, right: 30 }}
         >
-          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
           <XAxis
             type="number"
             tickFormatter={(v) => `${v.toFixed(1)}%`}
             fontSize={11}
+            tick={{ fill: "#94a3b8" }}
           />
           <YAxis
             type="category"
             dataKey="name"
             width={100}
             fontSize={11}
-            tick={{ fill: "#555" }}
+            tick={{ fill: "#64748b" }}
           />
           <Tooltip
             formatter={(value: number | undefined) => {
@@ -77,8 +78,13 @@ function ChartBox({
                 | undefined;
               return item?.fullName || String(_label);
             }}
+            contentStyle={{
+              borderRadius: "12px",
+              border: "1px solid #e2e8f0",
+              fontSize: "12px",
+            }}
           />
-          <ReferenceLine x={0} stroke="#666" strokeWidth={1} />
+          <ReferenceLine x={0} stroke="#94a3b8" strokeWidth={1} />
           <Bar
             dataKey="value"
             radius={[0, 4, 4, 0]}
@@ -127,8 +133,8 @@ export default function PerformanceChart({
   const top10 = sectors.slice(-10).reverse().map(toItem);
 
   return (
-    <div className="mb-6">
-      <h2 className="text-lg font-bold mb-3">업종 등락률 TOP 10</h2>
+    <div>
+      <h2 className="text-base font-bold mb-3">업종 등락률 TOP 10</h2>
       <div className="space-y-3">
         <ChartBox
           title="상승률 TOP 10"

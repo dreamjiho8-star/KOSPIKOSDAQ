@@ -6,7 +6,7 @@ import type { SectorAnalysis } from "@/lib/analysis";
 type SortKey = "changeRate" | "name";
 
 const statusBadge: Record<string, string> = {
-  normal: "bg-gray-100 text-gray-600",
+  normal: "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400",
   crash: "bg-red-600 text-white",
   contrarian_drop: "bg-orange-500 text-white",
   underperform: "bg-yellow-500 text-white",
@@ -43,13 +43,20 @@ export default function SectorTable({
   };
 
   const rateColor = (v: number) =>
-    v >= 0 ? "text-red-600" : "text-blue-600";
+    v >= 0
+      ? "text-red-600 dark:text-red-400"
+      : "text-blue-600 dark:text-blue-400";
 
   return (
-    <div className="mb-6">
+    <div>
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-bold">업종별 등락률 ({sectors.length}개)</h2>
-        <div className="flex gap-2">
+        <h2 className="text-base font-bold">
+          전체 업종{" "}
+          <span className="text-muted font-normal text-sm">
+            {sectors.length}개
+          </span>
+        </h2>
+        <div className="flex gap-1.5">
           {(
             [
               ["등락률", "changeRate"],
@@ -59,10 +66,10 @@ export default function SectorTable({
             <button
               key={key}
               onClick={() => handleSort(key)}
-              className={`text-xs px-3 py-1 rounded-full border ${
+              className={`text-xs px-3 py-1.5 rounded-full border font-medium transition ${
                 sortKey === key
                   ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-white text-gray-600 border-gray-300"
+                  : "bg-card text-muted border-card-border hover:border-slate-400"
               }`}
             >
               {label} {sortKey === key ? (asc ? "↑" : "↓") : ""}
@@ -76,7 +83,7 @@ export default function SectorTable({
           <div
             key={s.code}
             onClick={() => onSectorClick?.(s.code, s.name)}
-            className={`bg-white rounded-lg border p-3 flex items-center justify-between cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors ${
+            className={`bg-card border border-card-border rounded-xl p-3 flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-[0.99] transition ${
               s.status !== "normal" ? "border-l-4" : ""
             } ${
               s.status === "crash"
