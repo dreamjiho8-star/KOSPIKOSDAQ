@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import AlertBanner from "@/components/AlertBanner";
 import SectorTable from "@/components/SectorTable";
 import PerformanceChart from "@/components/PerformanceChart";
@@ -9,6 +9,59 @@ import SectorDetail from "@/components/SectorDetail";
 import MarketBreadth from "@/components/MarketBreadth";
 import SectorHeatmap from "@/components/SectorHeatmap";
 import type { AnalysisResult } from "@/lib/analysis";
+
+function usePullToRefresh(onRefresh: () => Promise<void>) {
+  const [pulling, setPulling] = useState(false);
+  const [pullY, setPullY] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const startY = useRef(0);
+  const isDragging = useRef(false);
+  const THRESHOLD = 80;
+
+  useEffect(() => {
+    const onTouchStart = (e: TouchEvent) => {
+      if (window.scrollY === 0) {
+        startY.current = e.touches[0].clientY;
+        isDragging.current = true;
+      }
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isDragging.current || refreshing) return;
+      const dy = e.touches[0].clientY - startY.current;
+      if (dy > 0 && window.scrollY === 0) {
+        setPulling(true);
+        setPullY(Math.min(dy * 0.4, 120));
+      } else {
+        setPulling(false);
+        setPullY(0);
+      }
+    };
+    const onTouchEnd = async () => {
+      if (!isDragging.current) return;
+      isDragging.current = false;
+      if (pullY >= THRESHOLD * 0.4) {
+        setRefreshing(true);
+        setPullY(50);
+        try { await onRefresh(); } finally {
+          setRefreshing(false);
+        }
+      }
+      setPulling(false);
+      setPullY(0);
+    };
+
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchmove", onTouchMove, { passive: true });
+    document.addEventListener("touchend", onTouchEnd);
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [pullY, refreshing, onRefresh]);
+
+  return { pulling: pulling || refreshing, pullY, refreshing };
+}
 
 type Tab = "overview" | "sectors";
 
@@ -29,7 +82,7 @@ export default function Home() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
   const fetchData = useCallback(() => {
-    fetch("/api/sectors")
+    return fetch("/api/sectors")
       .then((res) => res.json())
       .then((json) => {
         if (json.success) {
@@ -42,6 +95,8 @@ export default function Home() {
       .catch(() => setError("서버에 연결할 수 없습니다."))
       .finally(() => setLoading(false));
   }, []);
+
+  const { pulling, pullY, refreshing } = usePullToRefresh(fetchData);
 
   useEffect(() => {
     fetchData();
@@ -89,6 +144,26 @@ export default function Home() {
 
   return (
     <div className="min-h-screen pb-20 sm:pb-6">
+      {pulling && (
+        <div
+          className="fixed top-0 left-0 right-0 z-50 flex items-center justify-center transition-transform duration-200"
+          style={{ transform: `translateY(${pullY - 50}px)` }}
+        >
+          <div className="bg-card border border-card-border rounded-full p-2.5 shadow-lg">
+            {refreshing ? (
+              <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full" />
+            ) : (
+              <svg
+                className="h-5 w-5 text-muted transition-transform"
+                style={{ transform: pullY >= 32 ? "rotate(180deg)" : "rotate(0deg)" }}
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+              </svg>
+            )}
+          </div>
+        </div>
+      )}
       <header className="sticky top-0 z-40 bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-card-border">
         <div className="max-w-5xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
