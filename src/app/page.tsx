@@ -6,17 +6,15 @@ import SectorTable from "@/components/SectorTable";
 import PerformanceChart from "@/components/PerformanceChart";
 import IndexCards from "@/components/IndexCards";
 import SectorDetail from "@/components/SectorDetail";
-import InvestorTrends from "@/components/InvestorTrends";
 import MarketBreadth from "@/components/MarketBreadth";
 import SectorHeatmap from "@/components/SectorHeatmap";
 import type { AnalysisResult } from "@/lib/analysis";
 
-type Tab = "overview" | "sectors" | "investors";
+type Tab = "overview" | "sectors";
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "overview", label: "시장 현황", icon: "📊" },
   { key: "sectors", label: "업종 분석", icon: "📋" },
-  { key: "investors", label: "수급 동향", icon: "💰" },
 ];
 
 export default function Home() {
@@ -47,7 +45,6 @@ export default function Home() {
 
   useEffect(() => {
     fetchData();
-    // 1시간마다 자동 새로고침
     const interval = setInterval(fetchData, 60 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchData]);
@@ -92,7 +89,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen pb-20 sm:pb-6">
-      {/* 상단 헤더 */}
       <header className="sticky top-0 z-40 bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-card-border">
         <div className="max-w-5xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
@@ -138,7 +134,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* 탭 네비게이션 - 데스크톱 */}
           <nav className="hidden sm:flex gap-1 mt-3">
             {TABS.map((t) => (
               <button
@@ -157,7 +152,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* 메인 콘텐츠 */}
       <main className="max-w-5xl mx-auto px-4 py-5">
         {tab === "overview" && (
           <div className="space-y-5">
@@ -175,13 +169,6 @@ export default function Home() {
           </div>
         )}
 
-        {tab === "investors" && (
-          <div className="space-y-5">
-            <InvestorTrends onSectorClick={openSector} />
-          </div>
-        )}
-
-        {/* 하단 정보 */}
         <footer className="text-[10px] text-muted text-center mt-10 space-y-0.5">
           <p>데이터 출처: 네이버 금융 · 1시간마다 자동 갱신</p>
           <p>
@@ -195,7 +182,6 @@ export default function Home() {
         </footer>
       </main>
 
-      {/* 하단 탭바 - 모바일 */}
       <nav className="sm:hidden fixed bottom-0 inset-x-0 bg-card/90 backdrop-blur-xl border-t border-card-border z-40">
         <div className="flex">
           {TABS.map((t) => (
@@ -221,7 +207,6 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* 섹터 상세 모달 */}
       {selectedSector && (
         <SectorDetail
           sectorCode={selectedSector.code}
