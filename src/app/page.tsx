@@ -284,7 +284,7 @@ export default function Home() {
           <div className="space-y-5">
             <SectorHeatmap sectors={data.sectors} onSectorClick={openSector} />
             <MarketBreadth sectors={data.sectors} />
-            <IndexCards indices={data.indices} />
+            <IndexCards indices={data.indices} period={period} />
             <AlertBanner alerts={data.alerts} onSectorClick={openSector} />
           </div>
         )}

@@ -1,8 +1,23 @@
 "use client";
 
-import type { IndexAnalysis } from "@/lib/analysis";
+import type { IndexAnalysis, Period } from "@/lib/analysis";
 
-export default function IndexCards({ indices }: { indices: IndexAnalysis[] }) {
+const PERIOD_LABELS: Record<Period, string> = {
+  "1d": "전일비",
+  "1w": "1주",
+  "1m": "1개월",
+  "3m": "3개월",
+  ytd: "연초대비",
+  "1y": "1년",
+};
+
+export default function IndexCards({
+  indices,
+  period = "1d",
+}: {
+  indices: IndexAnalysis[];
+  period?: Period;
+}) {
   if (indices.length === 0) return null;
 
   const rateColor = (v: number | null) => {
@@ -28,24 +43,33 @@ export default function IndexCards({ indices }: { indices: IndexAnalysis[] }) {
                 maximumFractionDigits: 2,
               })}
             </div>
-            <div className={`text-sm font-bold ${rateColor(idx.changeRate)}`}>
-              {idx.changeRate >= 0 ? "+" : ""}
-              {idx.changeRate.toFixed(2)}%
-            </div>
-            <div className="flex gap-3 mt-1.5 text-[10px]">
-              {idx.weekReturn !== null && (
-                <span className={`${rateColor(idx.weekReturn)} font-medium`}>
-                  주 {idx.weekReturn >= 0 ? "+" : ""}
-                  {idx.weekReturn.toFixed(1)}%
-                </span>
-              )}
-              {idx.monthReturn !== null && (
-                <span className={`${rateColor(idx.monthReturn)} font-medium`}>
-                  월 {idx.monthReturn >= 0 ? "+" : ""}
-                  {idx.monthReturn.toFixed(1)}%
+            <div className="flex items-center gap-1.5">
+              <span className={`text-sm font-bold ${rateColor(idx.changeRate)}`}>
+                {idx.changeRate >= 0 ? "+" : ""}
+                {idx.changeRate.toFixed(2)}%
+              </span>
+              {period !== "1d" && (
+                <span className="text-[10px] text-muted font-medium">
+                  {PERIOD_LABELS[period]}
                 </span>
               )}
             </div>
+            {period === "1d" && (
+              <div className="flex gap-3 mt-1.5 text-[10px]">
+                {idx.weekReturn !== null && (
+                  <span className={`${rateColor(idx.weekReturn)} font-medium`}>
+                    주 {idx.weekReturn >= 0 ? "+" : ""}
+                    {idx.weekReturn.toFixed(1)}%
+                  </span>
+                )}
+                {idx.monthReturn !== null && (
+                  <span className={`${rateColor(idx.monthReturn)} font-medium`}>
+                    월 {idx.monthReturn >= 0 ? "+" : ""}
+                    {idx.monthReturn.toFixed(1)}%
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>

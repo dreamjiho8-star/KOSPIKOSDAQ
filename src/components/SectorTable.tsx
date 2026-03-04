@@ -170,14 +170,17 @@ export default function SectorTable({
       </div>
 
       {mode === "category" ? (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {categoryGroups.map(({ category, sectors: secs, avgRate }) => {
             const isCollapsed = collapsed.has(category);
             return (
-              <div key={category}>
+              <div
+                key={category}
+                className="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden"
+              >
                 <button
                   onClick={() => toggleCollapse(category)}
-                  className="w-full flex items-center justify-between px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+                  className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted w-4">
@@ -196,7 +199,7 @@ export default function SectorTable({
                   </span>
                 </button>
                 {!isCollapsed && (
-                  <div className="space-y-1.5 mt-1.5 ml-2">
+                  <div className="space-y-1.5 p-2.5">
                     {secs.map((s) => (
                       <SectorRow
                         key={s.code}

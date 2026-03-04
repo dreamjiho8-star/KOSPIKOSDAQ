@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchSectorData, fetchMajorIndices, fetchTopStocks, fetchStockSectorMap, fetchStockPriceHistories } from "@/lib/krx";
-import { analyzeSectors, computeSectorReturns, type Period } from "@/lib/analysis";
+import { fetchSectorData, fetchMajorIndices, fetchTopStocks, fetchStockSectorMap, fetchStockPriceHistories, fetchIndexHistory, MAJOR_INDICES } from "@/lib/krx";
+import { analyzeSectors, computeSectorReturns, getTargetIndex, type Period } from "@/lib/analysis";
 
 // 1시간 캐시
 export const revalidate = 3600;
@@ -67,6 +67,34 @@ export async function GET(request: NextRequest) {
     }
 
     const result = analyzeSectors(sectorData, majorIndices, topStocks, stockSectorMap);
+
+    // 기간별 지수 수익률 적용
+    if (period !== "1d") {
+      try {
+        const indexHistories = await Promise.all(
+          MAJOR_INDICES.map(async (info) => {
+            const history = await fetchIndexHistory(info.code, 260);
+            return { code: info.code, history };
+          })
+        );
+
+        result.indices = result.indices.map((idx) => {
+          const found = indexHistories.find((h) => h.code === idx.code);
+          if (!found || found.history.length < 2) return idx;
+          const history = found.history;
+          const latest = history[history.length - 1];
+          const targetIdx = getTargetIndex(history, period);
+          if (targetIdx < 0 || history[targetIdx].close <= 0) return idx;
+          const ret = ((latest.close - history[targetIdx].close) / history[targetIdx].close) * 100;
+          return {
+            ...idx,
+            changeRate: Math.round(ret * 100) / 100,
+          };
+        });
+      } catch {
+        // 지수 히스토리 실패 시 당일 데이터 유지
+      }
+    }
 
     return NextResponse.json({
       success: true,

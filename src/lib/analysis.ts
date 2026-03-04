@@ -58,7 +58,7 @@ export function computeSectorReturns(
   return sectorReturns;
 }
 
-function getTargetIndex(history: IndexPrice[], period: Period): number {
+export function getTargetIndex(history: IndexPrice[], period: Period): number {
   const len = history.length;
   if (len < 2) return -1;
 
