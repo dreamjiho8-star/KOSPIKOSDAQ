@@ -191,10 +191,77 @@ function formatMcap(v: number) {
     : `${v.toLocaleString()}억`;
 }
 
+function StockPopup({ stock, onClose }: { stock: StockInSector; onClose: () => void }) {
+  const rc = (v: number) =>
+    v >= 0 ? "text-red-600 dark:text-red-400" : "text-blue-600 dark:text-blue-400";
+
+  const pos52 =
+    stock.high52w && stock.low52w && stock.high52w > stock.low52w
+      ? ((stock.price - stock.low52w) / (stock.high52w - stock.low52w)) * 100
+      : null;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-[60] flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div
+        className="bg-card w-full sm:max-w-sm sm:rounded-2xl rounded-t-2xl overflow-y-auto max-h-[70vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-4 py-3 border-b border-card-border flex items-center justify-between">
+          <div>
+            <h4 className="font-bold text-base">{stock.name}</h4>
+            <p className="text-[10px] text-muted">시총 {formatMcap(stock.marketCap)}</p>
+          </div>
+          <div className="text-right">
+            <div className="font-mono text-base font-bold">{stock.price.toLocaleString()}</div>
+            <div className={`text-xs font-bold ${rc(stock.changeRate)}`}>
+              {stock.changeRate >= 0 ? "+" : ""}{stock.changeRate.toFixed(2)}%
+            </div>
+          </div>
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              { label: "PER", value: stock.per !== null ? `${stock.per}배` : "-" },
+              { label: "PBR", value: stock.pbr !== null ? `${stock.pbr}배` : "-" },
+              { label: "EPS", value: stock.eps !== null ? `${stock.eps.toLocaleString()}원` : "-" },
+              { label: "BPS", value: stock.bps !== null ? `${stock.bps.toLocaleString()}원` : "-" },
+              { label: "배당률", value: stock.dividendYield !== null ? `${stock.dividendYield}%` : "-" },
+              { label: "외인율", value: stock.foreignRate !== null ? `${stock.foreignRate}%` : "-" },
+              { label: "52주고", value: stock.high52w !== null ? stock.high52w.toLocaleString() : "-" },
+              { label: "52주저", value: stock.low52w !== null ? stock.low52w.toLocaleString() : "-" },
+            ].map(({ label, value }) => (
+              <div key={label} className="text-center bg-slate-50 dark:bg-slate-800 rounded-lg py-2">
+                <div className="text-[9px] text-muted">{label}</div>
+                <div className="text-[11px] font-bold font-mono">{value}</div>
+              </div>
+            ))}
+          </div>
+          {pos52 !== null && (
+            <div>
+              <div className="text-[9px] text-muted mb-1">52주 가격 위치</div>
+              <div className="h-1.5 bg-slate-200 dark:bg-slate-600 rounded-full relative">
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-blue-500 rounded-full shadow"
+                  style={{ left: `calc(${Math.min(100, Math.max(0, pos52))}% - 5px)` }}
+                />
+              </div>
+              <div className="flex justify-between text-[9px] text-muted mt-0.5">
+                <span>{stock.low52w?.toLocaleString()}</span>
+                <span>{stock.high52w?.toLocaleString()}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MiniTreemap({ stocks }: { stocks: StockInSector[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const [selectedStock, setSelectedStock] = useState<StockInSector | null>(null);
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -246,62 +313,68 @@ function MiniTreemap({ stocks }: { stocks: StockInSector[] }) {
   };
 
   return (
-    <div ref={containerRef} className="w-full">
-      {size.w > 0 && (
-        <div
-          className="relative"
-          style={{ width: size.w, height: size.h }}
-          onMouseLeave={hideTooltip}
-          onTouchEnd={hideTooltip}
-        >
-          {cells.map(({ stock, rect }) => {
-            const showName = rect.w >= 40 && rect.h >= 24;
-            const showRate = rect.w >= 35 && rect.h >= 38;
-            const showMcap = rect.w >= 40 && rect.h >= 52;
-            return (
-              <div
-                key={stock.code}
-                className="absolute flex flex-col items-center justify-center text-white overflow-hidden cursor-pointer"
-                style={{
-                  left: rect.x + 1,
-                  top: rect.y + 1,
-                  width: Math.max(0, rect.w - 2),
-                  height: Math.max(0, rect.h - 2),
-                  backgroundColor: rateToColor(stock.changeRate),
-                  borderRadius: 6,
-                }}
-                onMouseEnter={(e) => showTooltip(stock, e)}
-                onMouseMove={(e) => showTooltip(stock, e)}
-                onTouchStart={(e) => showTooltip(stock, e)}
-              >
-                {showName && (
-                  <span className="font-bold text-xs leading-tight text-center px-1 truncate max-w-full">
-                    {stock.name}
-                  </span>
-                )}
-                {showRate && (
-                  <span className="text-[11px] font-mono font-bold mt-0.5">
-                    {stock.changeRate >= 0 ? "+" : ""}
-                    {stock.changeRate.toFixed(2)}%
-                  </span>
-                )}
-                {showMcap && (
-                  <span className="text-[9px] opacity-70 mt-0.5">
-                    {formatMcap(stock.marketCap)}
-                  </span>
-                )}
-              </div>
-            );
-          })}
-          {/* Tooltip */}
+    <>
+      <div ref={containerRef} className="w-full">
+        {size.w > 0 && (
           <div
-            ref={tooltipRef}
-            className="absolute pointer-events-none bg-slate-900 text-white text-xs rounded-lg px-3 py-2 text-center shadow-lg transition-opacity duration-150 z-10"
-            style={{ opacity: 0, width: 140 }}
-          />
-        </div>
+            className="relative"
+            style={{ width: size.w, height: size.h }}
+            onMouseLeave={hideTooltip}
+            onTouchEnd={hideTooltip}
+          >
+            {cells.map(({ stock, rect }) => {
+              const showName = rect.w >= 40 && rect.h >= 24;
+              const showRate = rect.w >= 35 && rect.h >= 38;
+              const showMcap = rect.w >= 40 && rect.h >= 52;
+              return (
+                <div
+                  key={stock.code}
+                  className="absolute flex flex-col items-center justify-center text-white overflow-hidden cursor-pointer"
+                  style={{
+                    left: rect.x + 1,
+                    top: rect.y + 1,
+                    width: Math.max(0, rect.w - 2),
+                    height: Math.max(0, rect.h - 2),
+                    backgroundColor: rateToColor(stock.changeRate),
+                    borderRadius: 6,
+                  }}
+                  onClick={() => { hideTooltip(); setSelectedStock(stock); }}
+                  onMouseEnter={(e) => showTooltip(stock, e)}
+                  onMouseMove={(e) => showTooltip(stock, e)}
+                  onTouchStart={(e) => showTooltip(stock, e)}
+                >
+                  {showName && (
+                    <span className="font-bold text-xs leading-tight text-center px-1 truncate max-w-full">
+                      {stock.name}
+                    </span>
+                  )}
+                  {showRate && (
+                    <span className="text-[11px] font-mono font-bold mt-0.5">
+                      {stock.changeRate >= 0 ? "+" : ""}
+                      {stock.changeRate.toFixed(2)}%
+                    </span>
+                  )}
+                  {showMcap && (
+                    <span className="text-[9px] opacity-70 mt-0.5">
+                      {formatMcap(stock.marketCap)}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+            {/* Tooltip */}
+            <div
+              ref={tooltipRef}
+              className="absolute pointer-events-none bg-slate-900 text-white text-xs rounded-lg px-3 py-2 text-center shadow-lg transition-opacity duration-150 z-10"
+              style={{ opacity: 0, width: 140 }}
+            />
+          </div>
+        )}
+      </div>
+      {selectedStock && (
+        <StockPopup stock={selectedStock} onClose={() => setSelectedStock(null)} />
       )}
-    </div>
+    </>
   );
 }
 
