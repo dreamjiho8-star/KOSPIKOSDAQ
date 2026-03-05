@@ -200,8 +200,8 @@ export function analyzeSectors(
 
     const z = sd > 0 ? (s.changeRate - avgReturn) / sd : 0;
 
-    // 1. 급락: 평균 대비 2%p 이상 추가 하락, 또는 Z-score < -2
-    if (s.changeRate < avgReturn - 2 || z < -2) {
+    // 1. 급락: 실제 하락 + (평균 대비 2%p 이상 추가 하락 또는 Z-score < -2)
+    if (s.changeRate < 0 && (s.changeRate < avgReturn - 2 || z < -2)) {
       status = "crash";
       reason = `등락률 ${s.changeRate.toFixed(2)}% (평균 ${avgReturn.toFixed(2)}%, z=${z.toFixed(1)})`;
     }
@@ -217,8 +217,8 @@ export function analyzeSectors(
       reason = `시장 평균 +${avgReturn.toFixed(2)}%인데 ${s.changeRate.toFixed(2)}%`;
     }
 
-    // 3. 부진: Z-score < -1.5
-    if (status === "normal" && z < -1.5) {
+    // 3. 부진: 실제 하락 + Z-score < -1.5
+    if (status === "normal" && s.changeRate < 0 && z < -1.5) {
       status = "underperform";
       reason = `등락률 ${s.changeRate.toFixed(2)}% (평균 ${avgReturn.toFixed(2)}%, z=${z.toFixed(1)})`;
     }
@@ -244,8 +244,8 @@ export function analyzeSectors(
       reason = `시장 평균 ${avgReturn.toFixed(2)}%인데 +${s.changeRate.toFixed(2)}%`;
     }
 
-    // 6. 강세: Z-score > 1.5 (상대적 강세, 마이너스여도 가능)
-    if (status === "normal" && z > 1.5) {
+    // 6. 강세: 실제 상승 + Z-score > 1.5
+    if (status === "normal" && s.changeRate > 0 && z > 1.5) {
       status = "outperform";
       reason = `등락률 ${s.changeRate.toFixed(2)}% (평균 ${avgReturn.toFixed(2)}%, z=${z.toFixed(1)})`;
     }

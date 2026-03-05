@@ -21,6 +21,8 @@ export interface TopStock {
   name: string;
   changeRate: number;
   marketCap: number; // 억원
+  sectorCode?: string;
+  sectorName?: string;
 }
 
 export interface IndexPrice {
@@ -382,13 +384,13 @@ async function parseSectorStockCodes(sectorCode: string): Promise<{
 }
 
 // integration 엔드포인트에서 종목 전체 정보 가져오기
-interface StockFullData extends StockInSector {
+export interface StockFullData extends StockInSector {
   foreignNetOk: number;
   institutionNetOk: number;
   individualNetOk: number;
 }
 
-async function fetchStockFullData(
+export async function fetchStockFullData(
   stockCode: string
 ): Promise<StockFullData | null> {
   try {

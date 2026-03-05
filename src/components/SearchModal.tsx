@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import type { SectorAnalysis } from "@/lib/analysis";
-import type { TopStock } from "@/lib/krx";
+import type { TopStock, StockInSector } from "@/lib/krx";
 
 const rateColor = (v: number) =>
   v >= 0
@@ -12,6 +12,187 @@ const rateColor = (v: number) =>
 function formatMarketCap(v: number): string {
   if (v >= 10000) return `${(v / 10000).toFixed(1)}조`;
   return `${v.toLocaleString()}억`;
+}
+
+function formatPrice(v: number): string {
+  return v.toLocaleString("ko-KR");
+}
+
+// 종목 상세 패널 (섹터 상세 API에서 데이터 가져옴)
+function StockDetailPanel({
+  stock,
+  onClose,
+  onSectorClick,
+}: {
+  stock: TopStock;
+  onClose: () => void;
+  onSectorClick: (code: string, name: string) => void;
+}) {
+  const [detail, setDetail] = useState<StockInSector | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!stock.sectorCode) {
+      setLoading(false);
+      return;
+    }
+    fetch(`/api/sectors/${stock.sectorCode}?period=1d`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success) {
+          const all = [
+            ...(json.data.topByMarketCap || []),
+            ...(json.data.topByVolatility || []),
+          ];
+          const found = all.find((s: StockInSector) => s.code === stock.code);
+          if (found) setDetail(found);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [stock.code, stock.sectorCode]);
+
+  const pos52 =
+    detail?.high52w && detail?.low52w && detail.high52w > detail.low52w
+      ? ((detail.price - detail.low52w) / (detail.high52w - detail.low52w)) * 100
+      : null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] bg-black/40 flex items-end sm:items-center justify-center"
+      onClick={onClose}
+    >
+      <div
+        className="bg-card border border-card-border rounded-t-2xl sm:rounded-2xl w-full max-w-md mx-auto shadow-2xl max-h-[80vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 헤더: 종목명 + 가격 */}
+        <div className="px-4 pt-4 pb-3 border-b border-card-border">
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="font-bold text-lg">{stock.name}</h3>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs text-muted">{stock.code}</span>
+                <span className="text-xs text-muted">시총 {formatMarketCap(stock.marketCap)}</span>
+              </div>
+              {stock.sectorName && (
+                <button
+                  onClick={() => {
+                    onSectorClick(stock.sectorCode!, stock.sectorName!);
+                    onClose();
+                  }}
+                  className="text-xs text-blue-500 hover:text-blue-600 mt-1"
+                >
+                  {stock.sectorName} &rarr;
+                </button>
+              )}
+            </div>
+            <div className="text-right">
+              {detail ? (
+                <div className="text-xl font-extrabold">{formatPrice(detail.price)}</div>
+              ) : (
+                <div className="text-xl font-extrabold">&mdash;</div>
+              )}
+              <span className={`text-base font-bold ${rateColor(stock.changeRate)}`}>
+                {stock.changeRate >= 0 ? "+" : ""}{stock.changeRate.toFixed(2)}%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4">
+          {loading && (
+            <div className="flex items-center justify-center py-6">
+              <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full" />
+            </div>
+          )}
+
+          {!loading && !detail && (
+            <div className="text-center py-6 text-sm text-muted">
+              상세 정보를 불러올 수 없습니다.
+            </div>
+          )}
+
+          {detail && (
+            <div className="space-y-3">
+              {/* PER PBR EPS BPS 그리드 */}
+              <div className="grid grid-cols-4 gap-2">
+                <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 text-center">
+                  <div className="text-[10px] text-muted">PER</div>
+                  <div className="text-sm font-bold mt-0.5">
+                    {detail.per !== null ? `${detail.per.toFixed(1)}배` : "-"}
+                  </div>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 text-center">
+                  <div className="text-[10px] text-muted">PBR</div>
+                  <div className="text-sm font-bold mt-0.5">
+                    {detail.pbr !== null ? `${detail.pbr.toFixed(2)}배` : "-"}
+                  </div>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 text-center">
+                  <div className="text-[10px] text-muted">EPS</div>
+                  <div className="text-sm font-bold mt-0.5">
+                    {detail.eps !== null ? `${detail.eps.toLocaleString()}원` : "-"}
+                  </div>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 text-center">
+                  <div className="text-[10px] text-muted">BPS</div>
+                  <div className="text-sm font-bold mt-0.5">
+                    {detail.bps !== null ? `${detail.bps.toLocaleString()}원` : "-"}
+                  </div>
+                </div>
+              </div>
+
+              {/* 배당률 외인율 52주고 52주저 */}
+              <div className="grid grid-cols-4 gap-2">
+                <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 text-center">
+                  <div className="text-[10px] text-muted">배당률</div>
+                  <div className="text-sm font-bold mt-0.5">
+                    {detail.dividendYield !== null ? `${detail.dividendYield.toFixed(2)}%` : "-"}
+                  </div>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 text-center">
+                  <div className="text-[10px] text-muted">외인율</div>
+                  <div className="text-sm font-bold mt-0.5">
+                    {detail.foreignRate !== null ? `${detail.foreignRate.toFixed(1)}%` : "-"}
+                  </div>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 text-center">
+                  <div className="text-[10px] text-muted">52주고</div>
+                  <div className="text-sm font-bold mt-0.5">
+                    {detail.high52w !== null ? formatPrice(detail.high52w) : "-"}
+                  </div>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 text-center">
+                  <div className="text-[10px] text-muted">52주저</div>
+                  <div className="text-sm font-bold mt-0.5">
+                    {detail.low52w !== null ? formatPrice(detail.low52w) : "-"}
+                  </div>
+                </div>
+              </div>
+
+              {/* 52주 가격 위치 바 */}
+              {pos52 !== null && detail.high52w && detail.low52w && (
+                <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3">
+                  <div className="text-[10px] text-muted mb-2">52주 가격 위치</div>
+                  <div className="h-2 bg-slate-200 dark:bg-slate-600 rounded-full relative">
+                    <div
+                      className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-500 rounded-full shadow"
+                      style={{ left: `calc(${Math.min(100, Math.max(0, pos52))}% - 6px)` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-muted mt-1">
+                    <span>{formatPrice(detail.low52w)}</span>
+                    <span>{formatPrice(detail.high52w)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function SearchModal({
@@ -26,19 +207,24 @@ export default function SearchModal({
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
+  const [selectedStock, setSelectedStock] = useState<TopStock | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
+  const handleEsc = useCallback((e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      if (selectedStock) setSelectedStock(null);
+      else onClose();
+    }
+  }, [selectedStock, onClose]);
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [handleEsc]);
 
   const q = query.trim().toLowerCase();
 
@@ -147,29 +333,45 @@ export default function SearchModal({
                   종목 ({results.stocks.length})
                 </div>
                 {results.stocks.map((s) => (
-                  <div
+                  <button
                     key={s.code}
-                    className="flex items-center justify-between px-4 py-2.5"
+                    onClick={() => setSelectedStock(s)}
+                    className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 transition text-left"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-medium">{s.name}</span>
                         <span className="text-[10px] text-muted">{s.code}</span>
                       </div>
-                      <span className="text-[10px] text-muted">
-                        시총 {formatMarketCap(s.marketCap)}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-muted">
+                          시총 {formatMarketCap(s.marketCap)}
+                        </span>
+                        {s.sectorName && (
+                          <span className="text-[10px] text-blue-500">
+                            {s.sectorName}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <span className={`text-sm font-bold font-mono ml-2 ${rateColor(s.changeRate)}`}>
                       {s.changeRate >= 0 ? "+" : ""}{s.changeRate.toFixed(2)}%
                     </span>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {selectedStock && (
+        <StockDetailPanel
+          stock={selectedStock}
+          onClose={() => setSelectedStock(null)}
+          onSectorClick={onSectorClick}
+        />
+      )}
     </div>
   );
 }

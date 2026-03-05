@@ -67,6 +67,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // topStocks에 섹터 정보 추가
+    if (stockSectorMap) {
+      const sectorNameMap = new Map(sectors.map((s) => [s.code, s.name]));
+      for (const stock of topStocks) {
+        const sc = stockSectorMap.get(stock.code);
+        if (sc) {
+          stock.sectorCode = sc;
+          stock.sectorName = sectorNameMap.get(sc);
+        }
+      }
+    }
+
     const result = analyzeSectors(sectorData, majorIndices, topStocks, stockSectorMap, vkospi);
 
     // 기간별 지수 수익률 적용
