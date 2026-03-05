@@ -116,42 +116,82 @@ export async function fetchSectorData(): Promise<SectorData[]> {
   return sectors;
 }
 
-// 시총 상위 종목 가져오기 (KOSPI 80 + KOSDAQ 40 = 2 API calls only)
+// KRX 전종목 데이터 캐시 (fetchTopStocks + fetchSectorDetail에서 공유)
+interface KrxStockItem {
+  code: string;
+  name: string;
+  price: number;
+  changeRate: number;
+  marketCap: number; // 억원
+}
+
+let krxStockCache: { data: KrxStockItem[]; ts: number } | null = null;
+const KRX_STOCK_TTL = 60 * 60 * 1000; // 1시간
+
+async function fetchKrxAllStocks(): Promise<KrxStockItem[]> {
+  if (krxStockCache && Date.now() - krxStockCache.ts < KRX_STOCK_TTL) {
+    return krxStockCache.data;
+  }
+
+  const today = new Date();
+  const dates = [];
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    dates.push(
+      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`
+    );
+  }
+
+  for (const basDd of dates) {
+    const res = await fetch(
+      `${KRX_API_URL}/sto/stk_bydd_trd?basDd=${basDd}`,
+      { headers: { AUTH_KEY: KRX_AUTH_KEY } }
+    );
+    if (!res.ok) continue;
+
+    const json = await res.json();
+    const items = json.OutBlock_1;
+    if (!items || items.length === 0) continue;
+
+    const stocks: KrxStockItem[] = items
+      .filter((s: Record<string, string>) => s.TDD_CLSPRC && s.MKTCAP)
+      .map((s: Record<string, string>) => ({
+        code: s.ISU_CD,
+        name: s.ISU_NM,
+        price: parseInt(s.TDD_CLSPRC.replace(/,/g, "")) || 0,
+        changeRate: parseFloat(s.FLUC_RT) || 0,
+        marketCap: Math.round(parseInt(s.MKTCAP || "0") / 100000000),
+      }));
+
+    krxStockCache = { data: stocks, ts: Date.now() };
+    return stocks;
+  }
+
+  return [];
+}
+
+// 종목코드로 KRX 데이터 조회 (sector detail에서 사용)
+export async function getKrxStockMap(): Promise<Map<string, KrxStockItem>> {
+  const stocks = await fetchKrxAllStocks();
+  const map = new Map<string, KrxStockItem>();
+  for (const s of stocks) map.set(s.code, s);
+  return map;
+}
+
+// 시총 상위 종목 가져오기
 export async function fetchTopStocks(): Promise<TopStock[]> {
   try {
-    // KRX 공식 API: 전체 종목 일별 시세 (시가총액 포함)
-    const today = new Date();
-    const dates = [];
-    for (let i = 0; i < 5; i++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      dates.push(
-        `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`
-      );
-    }
-
-    for (const basDd of dates) {
-      const res = await fetch(
-        `${KRX_API_URL}/sto/stk_bydd_trd?basDd=${basDd}`,
-        { headers: { AUTH_KEY: KRX_AUTH_KEY } }
-      );
-      if (!res.ok) continue;
-
-      const json = await res.json();
-      const items = json.OutBlock_1;
-      if (!items || items.length === 0) continue;
-
-      const stocks: TopStock[] = items
-        .filter((s: Record<string, string>) => s.TDD_CLSPRC && s.MKTCAP)
-        .map((s: Record<string, string>) => ({
-          code: s.ISU_CD,
-          name: s.ISU_NM,
-          changeRate: parseFloat(s.FLUC_RT) || 0,
-          marketCap: Math.round(parseInt(s.MKTCAP || "0") / 100000000), // 원 → 억원
+    const stocks = await fetchKrxAllStocks();
+    if (stocks.length > 0) {
+      return stocks
+        .map((s) => ({
+          code: s.code,
+          name: s.name,
+          changeRate: s.changeRate,
+          marketCap: s.marketCap,
         }))
-        .sort((a: TopStock, b: TopStock) => b.marketCap - a.marketCap);
-
-      return stocks;
+        .sort((a, b) => b.marketCap - a.marketCap);
     }
   } catch {
     // KRX API 실패 시 네이버 폴백
@@ -450,30 +490,41 @@ export async function fetchSectorDetail(
   // 1. 업종 내 종목 코드 가져오기
   const { sectorName, stockCodes } = await parseSectorStockCodes(sectorCode);
 
-  // 2. 모든 종목 정보 병렬 조회 (배치 단위 30, 전체 처리)
+  // 2. KRX 전종목 데이터에서 가격/등락률/시총 가져오기
+  const krxMap = await getKrxStockMap();
+
+  // 3. 네이버 integration에서 밸류에이션 + 투자자 데이터 (KRX에 없는 것들)
   const allStocks: StockFullData[] = [];
   for (let i = 0; i < stockCodes.length; i += 30) {
     const batch = stockCodes.slice(i, i + 30);
     const results = await Promise.all(batch.map((c) => fetchStockFullData(c)));
     for (const s of results) {
-      if (s !== null && s.price > 0) allStocks.push(s);
+      if (s === null) continue;
+      // KRX 데이터로 가격/등락률/시총 덮어쓰기
+      const krx = krxMap.get(s.code);
+      if (krx) {
+        s.price = krx.price;
+        s.changeRate = krx.changeRate;
+        s.marketCap = krx.marketCap;
+      }
+      if (s.price > 0) allStocks.push(s);
     }
   }
 
-  // 3. 시총 상위 5
+  // 4. 시총 상위 5
   const strip = ({ foreignNetOk, institutionNetOk, individualNetOk, ...rest }: StockFullData): StockInSector => rest;
   const topByMarketCap = [...allStocks]
     .sort((a, b) => b.marketCap - a.marketCap)
     .slice(0, 5)
     .map(strip);
 
-  // 4. 등락률 변동 상위 5 (절대값)
+  // 5. 등락률 변동 상위 5 (절대값)
   const topByVolatility = [...allStocks]
     .sort((a, b) => Math.abs(b.changeRate) - Math.abs(a.changeRate))
     .slice(0, 5)
     .map(strip);
 
-  // 5. 투자자별 매매동향 (시총 상위 종목 합산)
+  // 6. 투자자별 매매동향 (시총 상위 종목 합산)
   const sortedByMcap = [...allStocks].sort(
     (a, b) => b.marketCap - a.marketCap
   );
@@ -487,7 +538,7 @@ export async function fetchSectorDetail(
     individualNet += s.individualNetOk;
   }
 
-  // 6. 섹터 평균 밸류에이션 (유효한 값만)
+  // 7. 섹터 평균 밸류에이션 (유효한 값만)
   const pers = allStocks.filter((s) => s.per !== null && s.per > 0).map((s) => s.per!);
   const pbrs = allStocks.filter((s) => s.pbr !== null && s.pbr > 0).map((s) => s.pbr!);
   const divs = allStocks.filter((s) => s.dividendYield !== null && s.dividendYield > 0).map((s) => s.dividendYield!);
