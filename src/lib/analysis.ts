@@ -1,4 +1,4 @@
-import type { SectorData, IndexPrice, IndexInfo, TopStock } from "./krx";
+import type { SectorData, IndexPrice, IndexInfo, TopStock, VkospiData } from "./krx";
 
 export type Period = "1d" | "1w" | "1m" | "3m" | "ytd" | "1y";
 
@@ -118,6 +118,7 @@ export interface AnalysisResult {
   alerts: SectorAnalysis[];
   indices: IndexAnalysis[];
   topStocks: TopStock[];
+  vkospi: VkospiData | null;
   avgSectorReturn: number;
   medianSectorReturn: number;
   lastUpdated: string;
@@ -171,7 +172,8 @@ export function analyzeSectors(
     monthAgo: IndexPrice | null;
   }[],
   topStocks: TopStock[] = [],
-  stockSectorMap?: Map<string, string>
+  stockSectorMap?: Map<string, string>,
+  vkospi?: VkospiData | null
 ): AnalysisResult {
   // 섹터별 시총 계산 (topStocks + stockSectorMap 이용)
   const sectorMarketCapMap = new Map<string, number>();
@@ -313,6 +315,7 @@ export function analyzeSectors(
     alerts,
     indices,
     topStocks,
+    vkospi: vkospi ?? null,
     avgSectorReturn: avgReturn,
     medianSectorReturn: medReturn,
     lastUpdated: new Date().toISOString(),

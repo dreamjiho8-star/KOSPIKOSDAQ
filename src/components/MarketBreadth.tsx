@@ -1,11 +1,30 @@
 "use client";
 
 import type { SectorAnalysis } from "@/lib/analysis";
+import type { VkospiData } from "@/lib/krx";
+
+// VKOSPI → 공포/탐욕 점수 변환 (0=극도탐욕, 100=극도공포)
+// VKOSPI 일반 범위: 12~50+, 극단: 60~80+
+function vkospiToFearScore(v: number): number {
+  if (v <= 12) return 0;
+  if (v >= 60) return 100;
+  return Math.round(((v - 12) / (60 - 12)) * 100);
+}
+
+function getFearLabel(score: number): { label: string; color: string } {
+  if (score >= 80) return { label: "극도 공포", color: "text-blue-700 dark:text-blue-400" };
+  if (score >= 60) return { label: "공포", color: "text-blue-500" };
+  if (score >= 40) return { label: "중립", color: "text-slate-500 dark:text-slate-400" };
+  if (score >= 20) return { label: "탐욕", color: "text-orange-500" };
+  return { label: "극도 탐욕", color: "text-red-500" };
+}
 
 export default function MarketBreadth({
   sectors,
+  vkospi,
 }: {
   sectors: SectorAnalysis[];
+  vkospi?: VkospiData | null;
 }) {
   const total = sectors.length;
   const up = sectors.filter((s) => s.changeRate > 0).length;
@@ -16,28 +35,8 @@ export default function MarketBreadth({
   const flatPct = total > 0 ? (flat / total) * 100 : 0;
   const downPct = total > 0 ? (down / total) * 100 : 0;
 
-  // 시장 심리 점수: 0(극도 공포) ~ 100(극도 탐욕)
-  const sentimentScore = total > 0 ? Math.round((up / total) * 100) : 50;
-  const sentimentLabel =
-    sentimentScore >= 75
-      ? "극도 탐욕"
-      : sentimentScore >= 60
-      ? "탐욕"
-      : sentimentScore >= 40
-      ? "중립"
-      : sentimentScore >= 25
-      ? "공포"
-      : "극도 공포";
-  const sentimentColor =
-    sentimentScore >= 75
-      ? "text-red-500"
-      : sentimentScore >= 60
-      ? "text-orange-500"
-      : sentimentScore >= 40
-      ? "text-slate-500 dark:text-slate-400"
-      : sentimentScore >= 25
-      ? "text-blue-500"
-      : "text-blue-700 dark:text-blue-400";
+  const fearScore = vkospi ? vkospiToFearScore(vkospi.value) : null;
+  const fearInfo = fearScore !== null ? getFearLabel(fearScore) : null;
 
   const rates = sectors.map((s) => s.changeRate);
   const maxUp = Math.max(...rates);
@@ -47,29 +46,37 @@ export default function MarketBreadth({
     <div className="bg-card border border-card-border rounded-2xl p-4">
       <h2 className="text-base font-bold mb-3">시장 심리</h2>
 
-      {/* 심리 게이지 */}
-      <div className="flex items-center gap-4 mb-4">
-        <div className="flex-1">
-          <div className="flex justify-between text-[10px] text-muted mb-1">
-            <span>공포</span>
-            <span>탐욕</span>
+      {/* VKOSPI 공포/탐욕 게이지 */}
+      {vkospi && fearScore !== null && fearInfo && (
+        <div className="flex items-center gap-4 mb-4">
+          <div className="flex-1">
+            <div className="flex justify-between text-[10px] text-muted mb-1">
+              <span>탐욕</span>
+              <span>공포</span>
+            </div>
+            <div className="h-3 bg-gradient-to-r from-red-500 via-slate-300 dark:via-slate-600 to-blue-500 rounded-full relative">
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white dark:bg-slate-800 border-2 border-slate-800 dark:border-white rounded-full shadow-md transition-all"
+                style={{ left: `calc(${fearScore}% - 8px)` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-muted mt-1">
+              <span>VKOSPI</span>
+              <span className={`font-bold ${vkospi.changeRate >= 0 ? "text-red-500" : "text-blue-500"}`}>
+                {vkospi.value.toFixed(2)} ({vkospi.changeRate >= 0 ? "+" : ""}{vkospi.changeRate.toFixed(2)}%)
+              </span>
+            </div>
           </div>
-          <div className="h-3 bg-gradient-to-r from-blue-500 via-slate-300 dark:via-slate-600 to-red-500 rounded-full relative">
-            <div
-              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white dark:bg-slate-800 border-2 border-slate-800 dark:border-white rounded-full shadow-md transition-all"
-              style={{ left: `calc(${sentimentScore}% - 8px)` }}
-            />
+          <div className="text-right shrink-0">
+            <div className={`text-2xl font-extrabold ${fearInfo.color}`}>
+              {fearScore}
+            </div>
+            <div className={`text-xs font-bold ${fearInfo.color}`}>
+              {fearInfo.label}
+            </div>
           </div>
         </div>
-        <div className="text-right shrink-0">
-          <div className={`text-2xl font-extrabold ${sentimentColor}`}>
-            {sentimentScore}
-          </div>
-          <div className={`text-xs font-bold ${sentimentColor}`}>
-            {sentimentLabel}
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* 상승/보합/하락 비율 바 */}
       <div className="h-6 flex rounded-lg overflow-hidden mb-2">

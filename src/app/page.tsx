@@ -8,6 +8,7 @@ import IndexCards from "@/components/IndexCards";
 import SectorDetail from "@/components/SectorDetail";
 import MarketBreadth from "@/components/MarketBreadth";
 import SectorHeatmap from "@/components/SectorHeatmap";
+import TopStocks from "@/components/TopStocks";
 import type { AnalysisResult, Period } from "@/lib/analysis";
 
 function usePullToRefresh(onRefresh: () => Promise<void>) {
@@ -283,8 +284,9 @@ export default function Home() {
         {tab === "overview" && (
           <div className="space-y-5">
             <SectorHeatmap sectors={data.sectors} onSectorClick={openSector} />
-            <MarketBreadth sectors={data.sectors} />
+            <MarketBreadth sectors={data.sectors} vkospi={data.vkospi} />
             <IndexCards indices={data.indices} period={period} />
+            <TopStocks stocks={data.topStocks} />
             <AlertBanner alerts={data.alerts} onSectorClick={openSector} />
           </div>
         )}

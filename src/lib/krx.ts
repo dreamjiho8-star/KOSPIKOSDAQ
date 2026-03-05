@@ -6,6 +6,9 @@ const NAVER_SECTOR_URL =
   "https://finance.naver.com/sise/sise_group.naver?type=upjong";
 const NAVER_FCHART_URL = "https://fchart.stock.naver.com/sise.nhn";
 
+const KRX_API_URL = "https://data-dbg.krx.co.kr/svc/apis";
+const KRX_AUTH_KEY = "D65BFADBAD814686960A883714A55CF54799BAE5";
+
 export interface SectorData {
   code: string;
   name: string;
@@ -115,6 +118,46 @@ export async function fetchSectorData(): Promise<SectorData[]> {
 
 // 시총 상위 종목 가져오기 (KOSPI 80 + KOSDAQ 40 = 2 API calls only)
 export async function fetchTopStocks(): Promise<TopStock[]> {
+  try {
+    // KRX 공식 API: 전체 종목 일별 시세 (시가총액 포함)
+    const today = new Date();
+    const dates = [];
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      dates.push(
+        `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`
+      );
+    }
+
+    for (const basDd of dates) {
+      const res = await fetch(
+        `${KRX_API_URL}/sto/stk_bydd_trd?basDd=${basDd}`,
+        { headers: { AUTH_KEY: KRX_AUTH_KEY } }
+      );
+      if (!res.ok) continue;
+
+      const json = await res.json();
+      const items = json.OutBlock_1;
+      if (!items || items.length === 0) continue;
+
+      const stocks: TopStock[] = items
+        .filter((s: Record<string, string>) => s.TDD_CLSPRC && s.MKTCAP)
+        .map((s: Record<string, string>) => ({
+          code: s.ISU_CD,
+          name: s.ISU_NM,
+          changeRate: parseFloat(s.FLUC_RT) || 0,
+          marketCap: Math.round(parseInt(s.MKTCAP || "0") / 100000000), // 원 → 억원
+        }))
+        .sort((a: TopStock, b: TopStock) => b.marketCap - a.marketCap);
+
+      return stocks;
+    }
+  } catch {
+    // KRX API 실패 시 네이버 폴백
+  }
+
+  // 폴백: 네이버 API
   const [kospiRes, kosdaqRes] = await Promise.all([
     fetch(
       "https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page=1&pageSize=80",
@@ -682,4 +725,53 @@ export async function fetchMajorIndices(): Promise<
     if (r.status === "fulfilled" && r.value) results.push(r.value);
   }
   return results;
+}
+
+// ===== KRX 공식 API: VKOSPI (변동성지수) =====
+
+export interface VkospiData {
+  value: number; // VKOSPI 현재값
+  change: number; // 전일대비 변동
+  changeRate: number; // 전일대비 변동률 (%)
+}
+
+export async function fetchVkospi(): Promise<VkospiData | null> {
+  try {
+    const today = new Date();
+    const dates = [];
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      dates.push(
+        `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`
+      );
+    }
+
+    for (const basDd of dates) {
+      const res = await fetch(
+        `${KRX_API_URL}/idx/drvprod_dd_trd?basDd=${basDd}`,
+        { headers: { AUTH_KEY: KRX_AUTH_KEY } }
+      );
+      if (!res.ok) continue;
+
+      const json = await res.json();
+      const items = json.OutBlock_1;
+      if (!items || items.length === 0) continue;
+
+      const vkospi = items.find(
+        (x: Record<string, string>) =>
+          x.IDX_NM === "코스피 200 변동성지수"
+      );
+      if (!vkospi || !vkospi.CLSPRC_IDX) continue;
+
+      return {
+        value: parseFloat(vkospi.CLSPRC_IDX),
+        change: parseFloat(vkospi.CMPPREVDD_IDX || "0"),
+        changeRate: parseFloat(vkospi.FLUC_RT || "0"),
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }

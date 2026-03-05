@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchSectorData, fetchMajorIndices, fetchTopStocks, fetchStockSectorMap, fetchStockPriceHistories, fetchIndexHistory, MAJOR_INDICES } from "@/lib/krx";
+import { fetchSectorData, fetchMajorIndices, fetchTopStocks, fetchStockSectorMap, fetchStockPriceHistories, fetchIndexHistory, MAJOR_INDICES, fetchVkospi } from "@/lib/krx";
 import { analyzeSectors, computeSectorReturns, getTargetIndex, type Period } from "@/lib/analysis";
 
 // 1시간 캐시
@@ -18,10 +18,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const [sectors, majorIndices, topStocks] = await Promise.all([
+    const [sectors, majorIndices, topStocks, vkospi] = await Promise.all([
       fetchSectorData(),
       fetchMajorIndices(),
       fetchTopStocks(),
+      fetchVkospi(),
     ]);
 
     if (sectors.length === 0) {
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const result = analyzeSectors(sectorData, majorIndices, topStocks, stockSectorMap);
+    const result = analyzeSectors(sectorData, majorIndices, topStocks, stockSectorMap, vkospi);
 
     // 기간별 지수 수익률 적용
     if (period !== "1d") {
