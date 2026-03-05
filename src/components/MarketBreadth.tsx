@@ -4,11 +4,11 @@ import type { SectorAnalysis } from "@/lib/analysis";
 import type { VkospiData } from "@/lib/krx";
 
 // VKOSPI → 공포/탐욕 점수 변환 (0=극도탐욕, 100=극도공포)
-// VKOSPI 일반 범위: 12~50+, 극단: 60~80+
+// VKOSPI 역대 범위: ~10(극안정) ~ 85+(2020 코로나, 2008 금융위기)
 function vkospiToFearScore(v: number): number {
   if (v <= 12) return 0;
-  if (v >= 60) return 100;
-  return Math.round(((v - 12) / (60 - 12)) * 100);
+  if (v >= 85) return 100;
+  return Math.round(((v - 12) / (85 - 12)) * 100);
 }
 
 function getFearLabel(score: number): { label: string; color: string } {

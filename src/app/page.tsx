@@ -299,7 +299,7 @@ export default function Home() {
         )}
 
         <footer className="text-[10px] text-muted text-center mt-10 space-y-0.5">
-          <p>데이터 출처: 네이버 금융 · 1시간마다 자동 갱신</p>
+          <p>데이터 출처: KRX 한국거래소 · 네이버 금융 · 1시간마다 자동 갱신</p>
           <p>
             급락: Z&lt;-2 · 급등: Z&gt;2 · 역행: 시장 반대 · 부진/강세:
             |Z|&gt;1.5
