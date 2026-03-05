@@ -183,6 +183,37 @@ export async function getKrxStockMap(): Promise<Map<string, KrxStockItem>> {
 
 // 시총 상위 종목 가져오기
 export async function fetchTopStocks(): Promise<TopStock[]> {
+  // 네이버 API 우선 (실시간 데이터)
+  try {
+    const [kospiRes, kosdaqRes] = await Promise.all([
+      fetch(
+        "https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page=1&pageSize=80",
+        { headers: { "User-Agent": UA } }
+      ),
+      fetch(
+        "https://m.stock.naver.com/api/stocks/marketValue/KOSDAQ?page=1&pageSize=40",
+        { headers: { "User-Agent": UA } }
+      ),
+    ]);
+
+    const kospiData = await kospiRes.json();
+    const kosdaqData = await kosdaqRes.json();
+
+    const parse = (stocks: Record<string, string>[]): TopStock[] =>
+      (stocks || []).map((s) => ({
+        code: s.itemCode,
+        name: s.stockName,
+        changeRate: parseFloat(s.fluctuationsRatio) || 0,
+        marketCap: parseInt((s.marketValue || "0").replace(/,/g, "")) || 0,
+      }));
+
+    const result = [...parse(kospiData.stocks), ...parse(kosdaqData.stocks)];
+    if (result.length > 0) return result;
+  } catch {
+    // 네이버 실패 시 KRX 폴백
+  }
+
+  // 폴백: KRX API (전일 종가 기준)
   try {
     const stocks = await fetchKrxAllStocks();
     if (stocks.length > 0) {
@@ -196,33 +227,10 @@ export async function fetchTopStocks(): Promise<TopStock[]> {
         .sort((a, b) => b.marketCap - a.marketCap);
     }
   } catch {
-    // KRX API 실패 시 네이버 폴백
+    // KRX도 실패
   }
 
-  // 폴백: 네이버 API
-  const [kospiRes, kosdaqRes] = await Promise.all([
-    fetch(
-      "https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page=1&pageSize=80",
-      { headers: { "User-Agent": UA } }
-    ),
-    fetch(
-      "https://m.stock.naver.com/api/stocks/marketValue/KOSDAQ?page=1&pageSize=40",
-      { headers: { "User-Agent": UA } }
-    ),
-  ]);
-
-  const kospiData = await kospiRes.json();
-  const kosdaqData = await kosdaqRes.json();
-
-  const parse = (stocks: Record<string, string>[]): TopStock[] =>
-    (stocks || []).map((s) => ({
-      code: s.itemCode,
-      name: s.stockName,
-      changeRate: parseFloat(s.fluctuationsRatio) || 0,
-      marketCap: parseInt((s.marketValue || "0").replace(/,/g, "")) || 0,
-    }));
-
-  return [...parse(kospiData.stocks), ...parse(kosdaqData.stocks)];
+  return [];
 }
 
 // 네이버 fchart API에서 지수 과거 데이터 가져오기
@@ -502,11 +510,9 @@ export async function fetchSectorDetail(
     const results = await Promise.all(batch.map((c) => fetchStockFullData(c)));
     for (const s of results) {
       if (s === null) continue;
-      // KRX 데이터로 가격/등락률/시총 덮어쓰기
+      // KRX 데이터는 시총 보정에만 사용 (가격/등락률은 네이버 실시간 유지)
       const krx = krxMap.get(s.code);
-      if (krx) {
-        s.price = krx.price;
-        s.changeRate = krx.changeRate;
+      if (krx && s.marketCap === 0) {
         s.marketCap = krx.marketCap;
       }
       if (s.price > 0) allStocks.push(s);
