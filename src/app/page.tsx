@@ -9,6 +9,7 @@ import SectorDetail from "@/components/SectorDetail";
 import MarketBreadth from "@/components/MarketBreadth";
 import SectorHeatmap from "@/components/SectorHeatmap";
 import TopStocks from "@/components/TopStocks";
+import SearchModal from "@/components/SearchModal";
 import type { AnalysisResult, Period } from "@/lib/analysis";
 
 function usePullToRefresh(onRefresh: () => Promise<void>) {
@@ -83,6 +84,7 @@ export default function Home() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [dark, setDark] = useState(false);
   const [period, setPeriod] = useState<Period>("1d");
+  const [showSearch, setShowSearch] = useState(false);
 
   useEffect(() => {
     setDark(document.documentElement.classList.contains("dark"));
@@ -206,6 +208,15 @@ export default function Home() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowSearch(true)}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition text-muted"
+                aria-label="검색"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </button>
               <button
                 onClick={toggleDark}
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition text-muted"
@@ -342,6 +353,17 @@ export default function Home() {
           sectorName={selectedSector.name}
           period={period}
           onClose={() => setSelectedSector(null)}
+        />
+      )}
+
+      {showSearch && (
+        <SearchModal
+          sectors={data.sectors}
+          stocks={data.topStocks}
+          onSectorClick={(code, name) => {
+            openSector(code, name);
+          }}
+          onClose={() => setShowSearch(false)}
         />
       )}
     </div>
