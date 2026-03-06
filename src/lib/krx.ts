@@ -402,14 +402,22 @@ export async function fetchStockFullData(
   stockCode: string
 ): Promise<StockFullData | null> {
   try {
-    const res = await fetch(
-      `https://m.stock.naver.com/api/stock/${stockCode}/integration`,
-      { headers: { "User-Agent": UA } }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
+    // integration (밸류에이션) + basic (실시간 가격) 병렬 호출
+    const [intRes, basicRes] = await Promise.all([
+      fetch(
+        `https://m.stock.naver.com/api/stock/${stockCode}/integration`,
+        { headers: { "User-Agent": UA } }
+      ),
+      fetch(
+        `https://m.stock.naver.com/api/stock/${stockCode}/basic`,
+        { headers: { "User-Agent": UA } }
+      ),
+    ]);
+    if (!intRes.ok) return null;
+    const data = await intRes.json();
+    const basicData = basicRes.ok ? await basicRes.json() : null;
 
-    const name = data.stockName || "";
+    const name = basicData?.stockName || data.stockName || "";
 
     // totalInfos에서 시가총액, 전일가, 밸류에이션 추출
     let marketCap = 0;
@@ -440,18 +448,29 @@ export async function fetchStockFullData(
       }
     }
 
-    // dealTrendInfos에서 당일 가격 및 투자자 데이터 추출
+    // basic API에서 실시간 가격/등락률 (장중에도 정확)
     let price = lastClosePrice;
+    let changeRate = 0;
+    if (basicData) {
+      const bp = parseNum(basicData.closePrice || "0");
+      if (bp > 0) price = bp;
+      const fr = parseFloat(basicData.fluctuationsRatio || "0");
+      if (!isNaN(fr)) changeRate = fr;
+    }
+
+    // basic이 없으면 dealTrendInfos에서 폴백
     let foreignNetOk = 0;
     let institutionNetOk = 0;
     let individualNetOk = 0;
-    let changeRate = 0;
 
     const trends = data.dealTrendInfos || [];
     if (trends.length > 0) {
       const latest = trends[0];
-      const cp = parseNum(latest.closePrice || "0");
-      if (cp > 0) price = cp;
+      // basic 가격이 없을 때만 dealTrendInfos 가격 사용
+      if (!basicData) {
+        const cp = parseNum(latest.closePrice || "0");
+        if (cp > 0) price = cp;
+      }
 
       const foreignShares = parseNum(latest.foreignerPureBuyQuant || "0");
       const institutionShares = parseNum(latest.organPureBuyQuant || "0");
@@ -464,8 +483,8 @@ export async function fetchStockFullData(
       individualNetOk = toOk(individualShares);
     }
 
-    // 등락률 계산
-    if (lastClosePrice > 0 && price > 0) {
+    // basic이 없을 때만 수동 등락률 계산
+    if (!basicData && lastClosePrice > 0 && price > 0) {
       changeRate =
         ((price - lastClosePrice) / lastClosePrice) * 100;
     }
