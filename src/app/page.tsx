@@ -9,6 +9,7 @@ import SectorDetail from "@/components/SectorDetail";
 import MarketBreadth from "@/components/MarketBreadth";
 import SectorHeatmap from "@/components/SectorHeatmap";
 import TopStocks from "@/components/TopStocks";
+import MarketTreemap from "@/components/MarketTreemap";
 import SearchModal from "@/components/SearchModal";
 import type { AnalysisResult, Period } from "@/lib/analysis";
 
@@ -85,6 +86,8 @@ export default function Home() {
   const [dark, setDark] = useState(false);
   const [period, setPeriod] = useState<Period>("1d");
   const [showSearch, setShowSearch] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const AUTO_REFRESH_INTERVAL = 5 * 60 * 1000; // 5분
 
   useEffect(() => {
     setDark(document.documentElement.classList.contains("dark"));
@@ -117,9 +120,13 @@ export default function Home() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 60 * 60 * 1000);
-    return () => clearInterval(interval);
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const interval = setInterval(fetchData, AUTO_REFRESH_INTERVAL);
+    return () => clearInterval(interval);
+  }, [autoRefresh, fetchData, AUTO_REFRESH_INTERVAL]);
 
   const openSector = (code: string, name: string) =>
     setSelectedSector({ code, name });
@@ -248,12 +255,24 @@ export default function Home() {
                     업데이트
                   </p>
                 )}
-                <button
-                  onClick={() => { setLoading(false); fetchData(); }}
-                  className="text-xs text-blue-500 hover:text-blue-600 font-medium mt-0.5"
-                >
-                  새로고침
-                </button>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <button
+                    onClick={() => setAutoRefresh(!autoRefresh)}
+                    className={`text-[10px] px-1.5 py-0.5 rounded transition ${
+                      autoRefresh
+                        ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
+                        : "bg-slate-100 dark:bg-slate-800 text-muted"
+                    }`}
+                  >
+                    {autoRefresh ? "AUTO" : "OFF"}
+                  </button>
+                  <button
+                    onClick={() => { setLoading(false); fetchData(); }}
+                    className="text-xs text-blue-500 hover:text-blue-600 font-medium"
+                  >
+                    새로고침
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -303,6 +322,7 @@ export default function Home() {
             <SectorHeatmap sectors={data.sectors} onSectorClick={openSector} />
             <MarketBreadth sectors={data.sectors} vkospi={data.vkospi} />
             <IndexCards indices={data.indices} period={period} />
+            <MarketTreemap stocks={data.topStocks} />
             <TopStocks stocks={data.topStocks} />
             <AlertBanner alerts={data.alerts} onSectorClick={openSector} />
           </div>

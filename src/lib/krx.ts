@@ -538,17 +538,16 @@ export async function fetchSectorDetail(
     }
   }
 
-  // 4. 시총 상위 5
+  // 4. 시총 순 전체 종목
   const strip = ({ foreignNetOk, institutionNetOk, individualNetOk, ...rest }: StockFullData): StockInSector => rest;
   const topByMarketCap = [...allStocks]
     .sort((a, b) => b.marketCap - a.marketCap)
-    .slice(0, 5)
     .map(strip);
 
-  // 5. 등락률 변동 상위 5 (절대값)
+  // 5. 등락률 변동 상위 (절대값)
   const topByVolatility = [...allStocks]
     .sort((a, b) => Math.abs(b.changeRate) - Math.abs(a.changeRate))
-    .slice(0, 5)
+    .slice(0, 10)
     .map(strip);
 
   // 6. 투자자별 매매동향 (시총 상위 종목 합산)

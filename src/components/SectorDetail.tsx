@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useLayoutEffect } from "react";
 import type { SectorDetailResult, StockInSector } from "@/lib/krx";
+import StockSparkline from "./StockSparkline";
 
 interface Props {
   sectorCode: string;
@@ -256,6 +257,7 @@ function StockPopup({ stock, onClose }: { stock: StockInSector; onClose: () => v
               </div>
             </div>
           )}
+          <StockSparkline stockCode={stock.code} />
         </div>
       </div>
     </div>
@@ -511,10 +513,10 @@ export default function SectorDetail({
                 </div>
               </section>
 
-              {/* 시총 상위 5 */}
+              {/* 시총 순 전체 종목 */}
               <section>
                 <h4 className="font-bold text-sm text-muted mb-2">
-                  시가총액 상위 5
+                  시가총액 순 ({data.topByMarketCap.length}개)
                   <span className="font-normal text-[10px] ml-1">(클릭하여 상세보기)</span>
                 </h4>
                 <div className="space-y-1.5">
@@ -534,10 +536,10 @@ export default function SectorDetail({
                 </div>
               </section>
 
-              {/* 변동률 상위 5 */}
+              {/* 변동률 상위 10 */}
               <section>
                 <h4 className="font-bold text-sm text-muted mb-2">
-                  등락률 변동 상위 5
+                  등락률 변동 상위 10
                 </h4>
                 <div className="space-y-1.5">
                   {data.topByVolatility.map((s, i) => (
