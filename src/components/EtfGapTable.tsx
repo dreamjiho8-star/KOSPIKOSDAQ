@@ -158,6 +158,15 @@ export default function EtfGapTable({ etfs }: { etfs: EtfGapData[] }) {
     });
   }, [etfs, sortKey, sortDir, filter, manager, trackIdx]);
 
+  // 매수 시그널: 시가갭 < 0 + 30일 회복폭 > 0
+  // 시가갭 작은 순(가장 음수=매수매력 큼) 정렬, 최대 10개
+  const buySignals = useMemo(() => {
+    return etfs
+      .filter((e) => e.todayGapOpen < 0 && e.avgRecovery > 0)
+      .sort((a, b) => a.todayGapOpen - b.todayGapOpen)
+      .slice(0, 10);
+  }, [etfs]);
+
   // 필터/정렬 바뀌면 1페이지로 리셋
   useEffect(() => {
     setPage(1);
@@ -222,6 +231,68 @@ export default function EtfGapTable({ etfs }: { etfs: EtfGapData[] }) {
           <li>• <span className="font-bold">종가갭</span>: 오늘 종가 vs 오늘 NAV</li>
           <li>• <span className="font-bold">회복</span>: |시가갭| - |종가갭| 30일 평균 + 갭 축소된 일수 비율</li>
         </ul>
+      </div>
+
+      {/* 매수 시그널 카드 */}
+      <div className="bg-green-50 dark:bg-green-950/30 border border-green-300 dark:border-green-800 rounded-2xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-green-200 dark:border-green-800">
+          <h3 className="font-bold text-base text-green-700 dark:text-green-400">
+            🎯 매수 시그널 후보 ({buySignals.length})
+          </h3>
+          <p className="text-[11px] text-muted mt-0.5">
+            시가가 NAV보다 저평가(디스카운트) + 30일 평균 갭 축소 경향 → 장중 회복으로 차익 가능
+          </p>
+        </div>
+
+        {buySignals.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-muted">
+            현재 조건을 만족하는 ETF가 없습니다.
+          </div>
+        ) : (
+          <div>
+            <div className="grid grid-cols-12 px-3 py-2 text-[10px] font-bold text-muted uppercase border-b border-green-200 dark:border-green-800 bg-green-100/50 dark:bg-green-900/20">
+              <div className="col-span-1 text-center">#</div>
+              <div className="col-span-5">ETF / 추종지수</div>
+              <div className="col-span-2 text-right">시가갭</div>
+              <div className="col-span-2 text-right">회복폭</div>
+              <div className="col-span-2 text-right">회복비율</div>
+            </div>
+            {buySignals.map((e, i) => (
+              <div
+                key={e.code}
+                className="grid grid-cols-12 px-3 py-2.5 border-b border-green-200/50 dark:border-green-800/50 last:border-b-0 hover:bg-green-100/40 dark:hover:bg-green-900/20 transition items-center"
+              >
+                <div className="col-span-1 text-center text-xs font-bold text-green-700 dark:text-green-400">
+                  {i + 1}
+                </div>
+                <div className="col-span-5 min-w-0">
+                  <div className="text-sm font-medium truncate">{e.name}</div>
+                  <div className="flex items-center gap-2 text-[10px] text-muted whitespace-nowrap">
+                    <span className="shrink-0">{e.code}</span>
+                    {e.trackingIndex && (
+                      <span className="truncate min-w-0">{e.trackingIndex}</span>
+                    )}
+                    <span className="shrink-0">{formatMcap(e.marketCap)}</span>
+                  </div>
+                </div>
+                <div className="col-span-2 text-right text-sm font-bold font-mono text-blue-600 dark:text-blue-400">
+                  {e.todayGapOpen.toFixed(2)}%
+                </div>
+                <div className="col-span-2 text-right text-sm font-bold font-mono text-green-600 dark:text-green-400">
+                  +{e.avgRecovery.toFixed(2)}%p
+                </div>
+                <div className="col-span-2 text-right">
+                  <div className="text-sm font-bold font-mono">
+                    {e.recoveryRate.toFixed(0)}%
+                  </div>
+                  <div className="text-[10px] text-muted">
+                    {e.recoveryDays}/{e.totalDays}일
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 컨트롤 */}
