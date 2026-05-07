@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchSectorData, fetchMajorIndices, fetchTopStocks, fetchStockSectorMap, fetchStockPriceHistories, fetchIndexHistory, MAJOR_INDICES, fetchVkospi, fetchEtfGapData } from "@/lib/krx";
 import { analyzeSectors, computeSectorReturns, getTargetIndex, type Period } from "@/lib/analysis";
 
-// 1시간 캐시
-export const revalidate = 3600;
+// 1분 캐시 (실시간 체감)
+export const revalidate = 60;
 export const preferredRegion = "icn1"; // 서울 리전 (네이버 API 지연 최소화)
 
 const VALID_PERIODS = new Set(["1d", "1w", "1m", "3m", "ytd", "1y"]);

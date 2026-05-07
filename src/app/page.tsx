@@ -88,7 +88,7 @@ export default function Home() {
   const [period, setPeriod] = useState<Period>("1d");
   const [showSearch, setShowSearch] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const AUTO_REFRESH_INTERVAL = 5 * 60 * 1000; // 5분
+  const AUTO_REFRESH_INTERVAL = 60 * 1000; // 1분
 
   useEffect(() => {
     setDark(document.documentElement.classList.contains("dark"));
@@ -340,7 +340,7 @@ export default function Home() {
         )}
 
         <footer className="text-[10px] text-muted text-center mt-10 space-y-0.5">
-          <p>데이터 출처: KRX 한국거래소 · 네이버 금융 · 1시간마다 자동 갱신</p>
+          <p>데이터 출처: KRX 한국거래소 · 네이버 금융 · 1분마다 자동 갱신</p>
           <p>
             급락: Z&lt;-2 · 급등: Z&gt;2 · 역행: 시장 반대 · 부진/강세:
             |Z|&gt;1.5

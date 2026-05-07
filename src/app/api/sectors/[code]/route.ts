@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchSectorDetail, fetchStockPriceHistories, type IndexPrice } from "@/lib/krx";
 import type { Period } from "@/lib/analysis";
 
-export const revalidate = 3600;
+export const revalidate = 300;
 export const preferredRegion = "icn1"; // 서울 리전
 
 const VALID_PERIODS = new Set(["1d", "1w", "1m", "3m", "ytd", "1y"]);
