@@ -29,7 +29,14 @@ export default function TopStocks({ stocks }: { stocks: TopStock[] }) {
               <span className="text-xs text-muted font-mono w-5 text-right shrink-0">
                 {i + 1}
               </span>
-              <span className="text-sm font-medium truncate">{s.name}</span>
+              <a
+                href={`https://finance.naver.com/item/main.naver?code=${s.code}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium truncate hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+              >
+                {s.name}
+              </a>
               <span className="text-[10px] text-muted shrink-0">
                 {formatMarketCap(s.marketCap)}
               </span>

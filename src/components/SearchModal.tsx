@@ -77,17 +77,27 @@ function StockDetailPanel({
                 <span className="text-xs text-muted">{stock.code}</span>
                 <span className="text-xs text-muted">시총 {formatMarketCap(stock.marketCap)}</span>
               </div>
-              {stock.sectorName && (
-                <button
-                  onClick={() => {
-                    onSectorClick(stock.sectorCode!, stock.sectorName!);
-                    onClose();
-                  }}
-                  className="text-xs text-blue-500 hover:text-blue-600 mt-1"
+              <div className="flex items-center gap-3 mt-1">
+                {stock.sectorName && (
+                  <button
+                    onClick={() => {
+                      onSectorClick(stock.sectorCode!, stock.sectorName!);
+                      onClose();
+                    }}
+                    className="text-xs text-blue-500 hover:text-blue-600"
+                  >
+                    {stock.sectorName} &rarr;
+                  </button>
+                )}
+                <a
+                  href={`https://finance.naver.com/item/main.naver?code=${stock.code}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-500 hover:text-blue-600 hover:underline"
                 >
-                  {stock.sectorName} &rarr;
-                </button>
-              )}
+                  네이버에서 보기 ↗
+                </a>
+              </div>
             </div>
             <div className="text-right">
               {detail ? (

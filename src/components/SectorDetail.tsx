@@ -65,6 +65,17 @@ function StockRow({
 
       {expanded && (
         <div className="px-3 pb-3 pt-1 border-t border-card-border">
+          <div className="flex justify-end -mb-1">
+            <a
+              href={`https://finance.naver.com/item/main.naver?code=${stock.code}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-[10px] text-blue-500 hover:text-blue-600 hover:underline"
+            >
+              네이버에서 보기 ↗
+            </a>
+          </div>
           <div className="grid grid-cols-4 gap-1.5">
             {[
               { label: "PER", value: stock.per !== null ? `${stock.per}배` : "-" },
@@ -215,7 +226,17 @@ function StockPopup({ stock, onClose }: { stock: StockInSector; onClose: () => v
         <div className="px-4 py-3 border-b border-card-border flex items-center justify-between">
           <div>
             <h4 className="font-bold text-base">{stock.name}</h4>
-            <p className="text-[10px] text-muted">시총 {formatMcap(stock.marketCap)}</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <p className="text-[10px] text-muted">시총 {formatMcap(stock.marketCap)}</p>
+              <a
+                href={`https://finance.naver.com/item/main.naver?code=${stock.code}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] text-blue-500 hover:text-blue-600 hover:underline"
+              >
+                네이버 ↗
+              </a>
+            </div>
           </div>
           <div className="text-right">
             <div className="font-mono text-base font-bold">{stock.price.toLocaleString()}</div>

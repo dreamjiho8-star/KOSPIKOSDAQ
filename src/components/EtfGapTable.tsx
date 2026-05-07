@@ -13,6 +13,10 @@ function formatMcap(v: number): string {
   return `${v.toLocaleString()}억`;
 }
 
+function naverUrl(code: string): string {
+  return `https://finance.naver.com/item/main.naver?code=${code}`;
+}
+
 type SortKey = "gapOpen" | "gapClose" | "recovery" | "marketCap";
 type SortDir = "asc" | "desc";
 
@@ -266,7 +270,14 @@ export default function EtfGapTable({ etfs }: { etfs: EtfGapData[] }) {
                   {i + 1}
                 </div>
                 <div className="col-span-5 min-w-0">
-                  <div className="text-sm font-medium truncate">{e.name}</div>
+                  <a
+                    href={naverUrl(e.code)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium truncate block hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                  >
+                    {e.name}
+                  </a>
                   <div className="flex items-center gap-2 text-[10px] text-muted whitespace-nowrap">
                     <span className="shrink-0">{e.code}</span>
                     {e.trackingIndex && (
@@ -368,7 +379,14 @@ export default function EtfGapTable({ etfs }: { etfs: EtfGapData[] }) {
             className="grid grid-cols-12 px-3 py-2.5 border-b border-card-border last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition items-center"
           >
             <div className="col-span-4 min-w-0">
-              <div className="text-sm font-medium truncate">{e.name}</div>
+              <a
+                href={naverUrl(e.code)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium truncate block hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+              >
+                {e.name}
+              </a>
               <div className="flex items-center gap-2 text-[10px] text-muted whitespace-nowrap">
                 <span className="shrink-0">{e.code}</span>
                 {e.trackingIndex && (
