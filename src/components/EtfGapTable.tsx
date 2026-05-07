@@ -268,10 +268,12 @@ export default function EtfGapTable({ etfs }: { etfs: EtfGapData[] }) {
           >
             <div className="col-span-5 min-w-0">
               <div className="text-sm font-medium truncate">{e.name}</div>
-              <div className="flex items-center gap-2 text-[10px] text-muted">
-                <span>{e.code}</span>
-                {e.trackingIndex && <span className="truncate">{e.trackingIndex}</span>}
-                <span>{formatMcap(e.marketCap)}</span>
+              <div className="flex items-center gap-2 text-[10px] text-muted whitespace-nowrap">
+                <span className="shrink-0">{e.code}</span>
+                {e.trackingIndex && (
+                  <span className="truncate min-w-0 flex-1">{e.trackingIndex}</span>
+                )}
+                <span className="shrink-0">{formatMcap(e.marketCap)}</span>
               </div>
             </div>
             <div className={`col-span-2 text-right text-sm font-bold font-mono ${rateColor(e.todayGapOpen)}`}>
