@@ -1,4 +1,4 @@
-import type { SectorData, IndexPrice, IndexInfo, TopStock, VkospiData } from "./krx";
+import type { SectorData, IndexPrice, IndexInfo, TopStock, VkospiData, EtfGapData } from "./krx";
 
 export type Period = "1d" | "1w" | "1m" | "3m" | "ytd" | "1y";
 
@@ -122,6 +122,7 @@ export interface AnalysisResult {
   avgSectorReturn: number;
   medianSectorReturn: number;
   lastUpdated: string;
+  etfGaps?: EtfGapData[];
 }
 
 function median(arr: number[]): number {

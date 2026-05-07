@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchSectorData, fetchMajorIndices, fetchTopStocks, fetchStockSectorMap, fetchStockPriceHistories, fetchIndexHistory, MAJOR_INDICES, fetchVkospi } from "@/lib/krx";
+import { fetchSectorData, fetchMajorIndices, fetchTopStocks, fetchStockSectorMap, fetchStockPriceHistories, fetchIndexHistory, MAJOR_INDICES, fetchVkospi, fetchEtfGapData } from "@/lib/krx";
 import { analyzeSectors, computeSectorReturns, getTargetIndex, type Period } from "@/lib/analysis";
 
 // 1시간 캐시
@@ -18,11 +18,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const [sectors, majorIndices, topStocks, vkospi] = await Promise.all([
+    const [sectors, majorIndices, topStocks, vkospi, etfGaps] = await Promise.all([
       fetchSectorData(),
       fetchMajorIndices(),
       fetchTopStocks(),
       fetchVkospi(),
+      fetchEtfGapData().catch(() => []),
     ]);
 
     if (sectors.length === 0) {
@@ -111,7 +112,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { ...result, period },
+      data: { ...result, period, etfGaps },
     });
   } catch (error) {
     console.error("Data fetch error:", error);

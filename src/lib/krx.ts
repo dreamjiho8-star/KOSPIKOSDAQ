@@ -852,3 +852,169 @@ export async function fetchVkospi(): Promise<VkospiData | null> {
     return null;
   }
 }
+
+// ====== ETF 괴리율 (한국상장 미국 ETF 갭 트레이딩) ======
+
+export interface EtfGapData {
+  code: string;
+  name: string;
+  trackingIndex: string;
+  marketCap: number;
+  // 오늘
+  todayOpen: number;
+  todayClose: number;
+  todayNav: number;
+  todayGapOpen: number;   // 시가 vs NAV (%)
+  todayGapClose: number;  // 종가 vs NAV (%)
+  // 30일 통계
+  avgRecovery: number;    // 평균 회복폭 (%p) - 양수면 갭 축소
+  recoveryDays: number;
+  totalDays: number;
+  recoveryRate: number;   // 회복 비율 (%)
+}
+
+interface EtfDailyRecord {
+  date: string;
+  open: number;
+  close: number;
+  nav: number;
+  gapOpen: number;
+  gapClose: number;
+}
+
+let etfGapCache: { data: EtfGapData[]; ts: number } | null = null;
+const ETF_GAP_TTL = 6 * 60 * 60 * 1000; // 6시간
+
+function isUsTrackingEtf(name: string): boolean {
+  const keywords = ["미국", "S&P", "나스닥", "필라델피아", "다우존스", "러셀", "NYSE"];
+  return keywords.some((k) => name.includes(k));
+}
+
+async function fetchKrxEtfDay(basDd: string): Promise<Record<string, string>[]> {
+  try {
+    const res = await fetch(
+      `${KRX_API_URL}/etp/etf_bydd_trd?basDd=${basDd}`,
+      { headers: { AUTH_KEY: KRX_AUTH_KEY } }
+    );
+    if (!res.ok) return [];
+    const json = await res.json();
+    return (json.OutBlock_1 || []) as Record<string, string>[];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchEtfGapData(): Promise<EtfGapData[]> {
+  if (etfGapCache && Date.now() - etfGapCache.ts < ETF_GAP_TTL) {
+    return etfGapCache.data;
+  }
+
+  // 최근 영업일 후보 50일치 (실제 거래일 30개 정도 모이면 충분)
+  const today = new Date();
+  const dateCandidates: string[] = [];
+  for (let i = 0; i < 50; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    if (d.getDay() === 0 || d.getDay() === 6) continue; // 주말 스킵
+    dateCandidates.push(
+      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`
+    );
+  }
+
+  // 병렬 호출 (10개씩 배치)
+  const allDays: { date: string; items: Record<string, string>[] }[] = [];
+  for (let i = 0; i < dateCandidates.length; i += 10) {
+    const batch = dateCandidates.slice(i, i + 10);
+    const results = await Promise.all(batch.map((d) => fetchKrxEtfDay(d)));
+    for (let j = 0; j < batch.length; j++) {
+      if (results[j].length > 0) {
+        allDays.push({ date: batch[j], items: results[j] });
+      }
+    }
+    if (allDays.length >= 30) break;
+  }
+
+  if (allDays.length === 0) return [];
+
+  // 최신순 정렬
+  allDays.sort((a, b) => b.date.localeCompare(a.date));
+  const recent30 = allDays.slice(0, 30);
+  const latest = recent30[0];
+
+  // 종목별 일별 기록 누적
+  const recordMap = new Map<string, EtfDailyRecord[]>();
+  const metaMap = new Map<string, { name: string; trackingIndex: string; marketCap: number }>();
+
+  for (const day of recent30) {
+    for (const item of day.items) {
+      const code = item.ISU_CD;
+      const name = item.ISU_NM;
+      if (!isUsTrackingEtf(name)) continue;
+
+      const nav = parseFloat(item.NAV || "0");
+      const open = parseFloat((item.TDD_OPNPRC || "0").replace(/,/g, ""));
+      const close = parseFloat((item.TDD_CLSPRC || "0").replace(/,/g, ""));
+      if (nav <= 0 || open <= 0 || close <= 0) continue;
+
+      const gapOpen = ((open - nav) / nav) * 100;
+      const gapClose = ((close - nav) / nav) * 100;
+
+      if (!recordMap.has(code)) recordMap.set(code, []);
+      recordMap.get(code)!.push({ date: day.date, open, close, nav, gapOpen, gapClose });
+
+      // 최신 정보 메타로 저장
+      if (day.date === latest.date) {
+        metaMap.set(code, {
+          name,
+          trackingIndex: item.IDX_IND_NM || "",
+          marketCap: Math.round(parseInt(item.MKTCAP || "0") / 100000000),
+        });
+      }
+    }
+  }
+
+  // 통계 계산
+  const result: EtfGapData[] = [];
+  for (const [code, records] of recordMap) {
+    const meta = metaMap.get(code);
+    if (!meta) continue;
+    if (records.length < 5) continue; // 최소 5일
+
+    // 최신순으로 정렬
+    records.sort((a, b) => b.date.localeCompare(a.date));
+    const todayRec = records[0];
+
+    // 회복폭: |gapOpen| - |gapClose| (양수면 갭 축소)
+    let totalRecovery = 0;
+    let recoveryDays = 0;
+    for (const r of records) {
+      const recovery = Math.abs(r.gapOpen) - Math.abs(r.gapClose);
+      totalRecovery += recovery;
+      if (recovery > 0) recoveryDays++;
+    }
+    const avgRecovery = totalRecovery / records.length;
+    const recoveryRate = (recoveryDays / records.length) * 100;
+
+    result.push({
+      code,
+      name: meta.name,
+      trackingIndex: meta.trackingIndex,
+      marketCap: meta.marketCap,
+      todayOpen: todayRec.open,
+      todayClose: todayRec.close,
+      todayNav: todayRec.nav,
+      todayGapOpen: Math.round(todayRec.gapOpen * 100) / 100,
+      todayGapClose: Math.round(todayRec.gapClose * 100) / 100,
+      avgRecovery: Math.round(avgRecovery * 100) / 100,
+      recoveryDays,
+      totalDays: records.length,
+      recoveryRate: Math.round(recoveryRate * 10) / 10,
+    });
+  }
+
+  // 시총 큰 순 → 절대 시가갭 큰 순으로 1차 정렬 (사용자가 다시 정렬 가능)
+  result.sort((a, b) => Math.abs(b.todayGapOpen) - Math.abs(a.todayGapOpen));
+
+  etfGapCache = { data: result, ts: Date.now() };
+  return result;
+}

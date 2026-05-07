@@ -9,7 +9,7 @@ import SectorDetail from "@/components/SectorDetail";
 import MarketBreadth from "@/components/MarketBreadth";
 import SectorHeatmap from "@/components/SectorHeatmap";
 import TopStocks from "@/components/TopStocks";
-import MarketTreemap from "@/components/MarketTreemap";
+import EtfGapTable from "@/components/EtfGapTable";
 import SearchModal from "@/components/SearchModal";
 import type { AnalysisResult, Period } from "@/lib/analysis";
 
@@ -66,11 +66,12 @@ function usePullToRefresh(onRefresh: () => Promise<void>) {
   return { pulling: pulling || refreshing, pullY, refreshing };
 }
 
-type Tab = "overview" | "sectors";
+type Tab = "overview" | "sectors" | "etf";
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "overview", label: "시장 현황", icon: "📊" },
   { key: "sectors", label: "업종 분석", icon: "📋" },
+  { key: "etf", label: "ETF 갭", icon: "🎯" },
 ];
 
 export default function Home() {
@@ -322,7 +323,6 @@ export default function Home() {
             <SectorHeatmap sectors={data.sectors} onSectorClick={openSector} />
             <MarketBreadth sectors={data.sectors} vkospi={data.vkospi} />
             <IndexCards indices={data.indices} period={period} />
-            <MarketTreemap stocks={data.topStocks} />
             <TopStocks stocks={data.topStocks} />
             <AlertBanner alerts={data.alerts} onSectorClick={openSector} />
           </div>
@@ -333,6 +333,10 @@ export default function Home() {
             <PerformanceChart sectors={data.sectors} onSectorClick={openSector} />
             <SectorTable sectors={data.sectors} onSectorClick={openSector} />
           </div>
+        )}
+
+        {tab === "etf" && (
+          <EtfGapTable etfs={data.etfGaps || []} />
         )}
 
         <footer className="text-[10px] text-muted text-center mt-10 space-y-0.5">
