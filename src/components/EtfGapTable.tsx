@@ -256,7 +256,8 @@ export default function EtfGapTable({ etfs }: { etfs: EtfGapData[] }) {
           <div>
             <div className="grid grid-cols-12 px-3 py-2 text-[10px] font-bold text-muted uppercase border-b border-green-200 dark:border-green-800 bg-green-100/50 dark:bg-green-900/20">
               <div className="col-span-1 text-center">#</div>
-              <div className="col-span-5">ETF / 추종지수</div>
+              <div className="col-span-4">ETF / 추종지수</div>
+              <div className="col-span-1 text-right">시가총액</div>
               <div className="col-span-2 text-right">시가갭</div>
               <div className="col-span-2 text-right">회복폭</div>
               <div className="col-span-2 text-right">회복비율</div>
@@ -269,7 +270,7 @@ export default function EtfGapTable({ etfs }: { etfs: EtfGapData[] }) {
                 <div className="col-span-1 text-center text-xs font-bold text-green-700 dark:text-green-400">
                   {i + 1}
                 </div>
-                <div className="col-span-5 min-w-0">
+                <div className="col-span-4 min-w-0">
                   <a
                     href={naverUrl(e.code)}
                     target="_blank"
@@ -283,8 +284,10 @@ export default function EtfGapTable({ etfs }: { etfs: EtfGapData[] }) {
                     {e.trackingIndex && (
                       <span className="truncate min-w-0">{e.trackingIndex}</span>
                     )}
-                    <span className="shrink-0">{formatMcap(e.marketCap)}</span>
                   </div>
+                </div>
+                <div className="col-span-1 text-right text-xs font-mono text-muted whitespace-nowrap">
+                  {formatMcap(e.marketCap)}
                 </div>
                 <div className="col-span-2 text-right text-sm font-bold font-mono text-blue-600 dark:text-blue-400">
                   {e.todayGapOpen.toFixed(2)}%
