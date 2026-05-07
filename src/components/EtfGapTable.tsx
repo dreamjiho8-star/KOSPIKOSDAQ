@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { EtfGapData } from "@/lib/krx";
 
 const rateColor = (v: number) =>
@@ -14,29 +14,85 @@ function formatMcap(v: number): string {
 }
 
 type SortKey = "gapOpen" | "gapClose" | "recovery" | "marketCap";
+type SortDir = "asc" | "desc";
+
+const PAGE_SIZE = 10;
+
+// ETF 이름에서 운용사 추출 (첫 단어)
+function extractManager(name: string): string {
+  return name.split(/\s+/)[0];
+}
+
+// 추종지수 단순화 (그룹화용)
+function simplifyIndex(idx: string): string {
+  if (!idx) return "기타";
+  return idx.replace(/\s+/g, "");
+}
 
 export default function EtfGapTable({ etfs }: { etfs: EtfGapData[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("gapOpen");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [filter, setFilter] = useState("");
+  const [manager, setManager] = useState<string>("ALL");
+  const [trackIdx, setTrackIdx] = useState<string>("ALL");
+  const [page, setPage] = useState(1);
 
+  // 운용사 / 추종지수 옵션
+  const { managers, indices } = useMemo(() => {
+    const mgrCount = new Map<string, number>();
+    const idxCount = new Map<string, number>();
+    for (const e of etfs) {
+      const m = extractManager(e.name);
+      mgrCount.set(m, (mgrCount.get(m) || 0) + 1);
+      const i = simplifyIndex(e.trackingIndex);
+      idxCount.set(i, (idxCount.get(i) || 0) + 1);
+    }
+    const sortByCount = (a: [string, number], b: [string, number]) => b[1] - a[1];
+    return {
+      managers: Array.from(mgrCount.entries()).sort(sortByCount),
+      indices: Array.from(idxCount.entries()).sort(sortByCount),
+    };
+  }, [etfs]);
+
+  // 필터링 + 정렬
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
     let list = etfs;
+
+    if (manager !== "ALL") {
+      list = list.filter((e) => extractManager(e.name) === manager);
+    }
+    if (trackIdx !== "ALL") {
+      list = list.filter((e) => simplifyIndex(e.trackingIndex) === trackIdx);
+    }
     if (q) {
-      list = etfs.filter(
+      list = list.filter(
         (e) =>
           e.name.toLowerCase().includes(q) ||
           e.code.includes(q) ||
           e.trackingIndex.toLowerCase().includes(q)
       );
     }
+
+    const dir = sortDir === "desc" ? -1 : 1;
     return [...list].sort((a, b) => {
-      if (sortKey === "gapOpen") return Math.abs(b.todayGapOpen) - Math.abs(a.todayGapOpen);
-      if (sortKey === "gapClose") return Math.abs(b.todayGapClose) - Math.abs(a.todayGapClose);
-      if (sortKey === "recovery") return b.avgRecovery - a.avgRecovery;
-      return b.marketCap - a.marketCap;
+      let diff = 0;
+      if (sortKey === "gapOpen") diff = a.todayGapOpen - b.todayGapOpen;
+      else if (sortKey === "gapClose") diff = a.todayGapClose - b.todayGapClose;
+      else if (sortKey === "recovery") diff = a.avgRecovery - b.avgRecovery;
+      else diff = a.marketCap - b.marketCap;
+      return diff * dir;
     });
-  }, [etfs, sortKey, filter]);
+  }, [etfs, sortKey, sortDir, filter, manager, trackIdx]);
+
+  // 필터/정렬 바뀌면 1페이지로 리셋
+  useEffect(() => {
+    setPage(1);
+  }, [filter, manager, trackIdx, sortKey, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   if (etfs.length === 0) {
     return (
@@ -45,6 +101,39 @@ export default function EtfGapTable({ etfs }: { etfs: EtfGapData[] }) {
       </div>
     );
   }
+
+  // 정렬 버튼 클릭 시: 같은 키면 방향 토글, 다른 키면 desc로 시작
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(sortDir === "desc" ? "asc" : "desc");
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
+  const sortIcon = (key: SortKey) => {
+    if (sortKey !== key) return "";
+    return sortDir === "desc" ? " ↓" : " ↑";
+  };
+
+  // 페이지 번호 표시 로직 (앞뒤 2개씩 + ...)
+  const pageNumbers = useMemo(() => {
+    const pages: (number | "...")[] = [];
+    const range = 1;
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (safePage > 3) pages.push("...");
+      for (let i = Math.max(2, safePage - range); i <= Math.min(totalPages - 1, safePage + range); i++) {
+        pages.push(i);
+      }
+      if (safePage < totalPages - 2) pages.push("...");
+      pages.push(totalPages);
+    }
+    return pages;
+  }, [safePage, totalPages]);
 
   return (
     <div className="space-y-4">
@@ -63,34 +152,105 @@ export default function EtfGapTable({ etfs }: { etfs: EtfGapData[] }) {
       </div>
 
       {/* 컨트롤 */}
-      <div className="bg-card border border-card-border rounded-2xl p-3 flex flex-wrap items-center gap-2">
+      <div className="bg-card border border-card-border rounded-2xl p-3 space-y-2">
+        {/* 검색창 */}
         <input
           type="text"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder="ETF명 / 추종지수 검색"
-          className="flex-1 min-w-[180px] bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg text-sm outline-none placeholder:text-muted"
+          placeholder="ETF명 / 종목코드 / 추종지수 검색"
+          className="w-full bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg text-sm outline-none placeholder:text-muted"
         />
-        <div className="flex gap-1">
-          {([
-            ["gapOpen", "시가갭"],
-            ["gapClose", "종가갭"],
-            ["recovery", "회복폭"],
-            ["marketCap", "시총"],
-          ] as [SortKey, string][]).map(([k, label]) => (
+
+        {/* 운용사 필터 */}
+        <div className="flex items-start gap-2">
+          <span className="text-[10px] font-bold text-muted shrink-0 mt-1.5 w-12">운용사</span>
+          <div className="flex flex-wrap gap-1">
             <button
-              key={k}
-              onClick={() => setSortKey(k)}
+              onClick={() => setManager("ALL")}
               className={`px-2.5 py-1 text-[11px] rounded-md transition ${
-                sortKey === k
+                manager === "ALL"
                   ? "bg-blue-600 text-white"
                   : "bg-slate-100 dark:bg-slate-800 text-muted hover:bg-slate-200 dark:hover:bg-slate-700"
               }`}
             >
-              {label}
+              전체
             </button>
-          ))}
+            {managers.map(([m, count]) => (
+              <button
+                key={m}
+                onClick={() => setManager(m)}
+                className={`px-2.5 py-1 text-[11px] rounded-md transition ${
+                  manager === m
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 dark:bg-slate-800 text-muted hover:bg-slate-200 dark:hover:bg-slate-700"
+                }`}
+              >
+                {m} <span className="opacity-60">{count}</span>
+              </button>
+            ))}
+          </div>
         </div>
+
+        {/* 추종지수 필터 */}
+        <div className="flex items-start gap-2">
+          <span className="text-[10px] font-bold text-muted shrink-0 mt-1.5 w-12">추종지수</span>
+          <div className="flex flex-wrap gap-1">
+            <button
+              onClick={() => setTrackIdx("ALL")}
+              className={`px-2.5 py-1 text-[11px] rounded-md transition ${
+                trackIdx === "ALL"
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-100 dark:bg-slate-800 text-muted hover:bg-slate-200 dark:hover:bg-slate-700"
+              }`}
+            >
+              전체
+            </button>
+            {indices.slice(0, 30).map(([i, count]) => (
+              <button
+                key={i}
+                onClick={() => setTrackIdx(i)}
+                className={`px-2.5 py-1 text-[11px] rounded-md transition ${
+                  trackIdx === i
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 dark:bg-slate-800 text-muted hover:bg-slate-200 dark:hover:bg-slate-700"
+                }`}
+              >
+                {i} <span className="opacity-60">{count}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 정렬 버튼 */}
+        <div className="flex items-center gap-2 pt-1 border-t border-card-border">
+          <span className="text-[10px] font-bold text-muted shrink-0 w-12">정렬</span>
+          <div className="flex flex-wrap gap-1">
+            {([
+              ["gapOpen", "시가갭"],
+              ["gapClose", "종가갭"],
+              ["recovery", "회복폭"],
+              ["marketCap", "시총"],
+            ] as [SortKey, string][]).map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => handleSort(k)}
+                className={`px-2.5 py-1 text-[11px] rounded-md transition ${
+                  sortKey === k
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 dark:bg-slate-800 text-muted hover:bg-slate-200 dark:hover:bg-slate-700"
+                }`}
+              >
+                {label}{sortIcon(k)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 결과 카운트 */}
+      <div className="text-[11px] text-muted px-1">
+        총 {filtered.length}개 · {safePage}/{totalPages} 페이지
       </div>
 
       {/* 테이블 */}
@@ -101,7 +261,7 @@ export default function EtfGapTable({ etfs }: { etfs: EtfGapData[] }) {
           <div className="col-span-2 text-right">종가갭</div>
           <div className="col-span-3 text-right">30일 회복</div>
         </div>
-        {filtered.map((e) => (
+        {pageItems.map((e) => (
           <div
             key={e.code}
             className="grid grid-cols-12 px-3 py-2.5 border-b border-card-border last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition"
@@ -132,10 +292,47 @@ export default function EtfGapTable({ etfs }: { etfs: EtfGapData[] }) {
         ))}
         {filtered.length === 0 && (
           <div className="px-4 py-8 text-center text-sm text-muted">
-            검색 결과가 없습니다.
+            조건에 맞는 ETF가 없습니다.
           </div>
         )}
       </div>
+
+      {/* 페이지네이션 */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-1">
+          <button
+            onClick={() => setPage(safePage - 1)}
+            disabled={safePage === 1}
+            className="px-2.5 py-1 text-xs rounded-md bg-slate-100 dark:bg-slate-800 text-muted hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition"
+          >
+            ‹
+          </button>
+          {pageNumbers.map((p, idx) =>
+            p === "..." ? (
+              <span key={`ellip-${idx}`} className="px-1.5 text-xs text-muted">…</span>
+            ) : (
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                className={`min-w-[28px] px-2 py-1 text-xs rounded-md transition ${
+                  safePage === p
+                    ? "bg-blue-600 text-white font-bold"
+                    : "bg-slate-100 dark:bg-slate-800 text-muted hover:bg-slate-200 dark:hover:bg-slate-700"
+                }`}
+              >
+                {p}
+              </button>
+            )
+          )}
+          <button
+            onClick={() => setPage(safePage + 1)}
+            disabled={safePage === totalPages}
+            className="px-2.5 py-1 text-xs rounded-md bg-slate-100 dark:bg-slate-800 text-muted hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition"
+          >
+            ›
+          </button>
+        </div>
+      )}
 
       <p className="text-[10px] text-muted text-center">
         * 데이터: KRX ETF 일별 통계 · 6시간 캐시 · 시가는 단일가매매(08:30~09:00) 결과 반영
