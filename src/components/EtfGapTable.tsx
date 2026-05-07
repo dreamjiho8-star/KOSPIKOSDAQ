@@ -285,7 +285,8 @@ export default function EtfGapTable({ etfs }: { etfs: EtfGapData[] }) {
       {/* 테이블 */}
       <div className="bg-card border border-card-border rounded-2xl overflow-hidden">
         <div className="grid grid-cols-12 px-3 py-2 text-[10px] font-bold text-muted uppercase border-b border-card-border bg-slate-50 dark:bg-slate-800/50">
-          <div className="col-span-5">ETF / 추종지수</div>
+          <div className="col-span-4">ETF / 추종지수</div>
+          <div className="col-span-1 text-right">시가총액</div>
           <div className="col-span-2 text-right">시가갭</div>
           <div className="col-span-2 text-right">종가갭</div>
           <div className="col-span-3 text-right">30일 회복</div>
@@ -293,17 +294,19 @@ export default function EtfGapTable({ etfs }: { etfs: EtfGapData[] }) {
         {pageItems.map((e) => (
           <div
             key={e.code}
-            className="grid grid-cols-12 px-3 py-2.5 border-b border-card-border last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition"
+            className="grid grid-cols-12 px-3 py-2.5 border-b border-card-border last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition items-center"
           >
-            <div className="col-span-5 min-w-0">
+            <div className="col-span-4 min-w-0">
               <div className="text-sm font-medium truncate">{e.name}</div>
               <div className="flex items-center gap-2 text-[10px] text-muted whitespace-nowrap">
                 <span className="shrink-0">{e.code}</span>
                 {e.trackingIndex && (
-                  <span className="truncate min-w-0 flex-1">{e.trackingIndex}</span>
+                  <span className="truncate min-w-0">{e.trackingIndex}</span>
                 )}
-                <span className="shrink-0">{formatMcap(e.marketCap)}</span>
               </div>
+            </div>
+            <div className="col-span-1 text-right text-xs font-mono text-muted whitespace-nowrap">
+              {formatMcap(e.marketCap)}
             </div>
             <div className={`col-span-2 text-right text-sm font-bold font-mono ${rateColor(e.todayGapOpen)}`}>
               {e.todayGapOpen >= 0 ? "+" : ""}{e.todayGapOpen.toFixed(2)}%
